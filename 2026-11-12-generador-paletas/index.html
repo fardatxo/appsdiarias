@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generador de paletas</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <header>
+    <h1>Generador de paletas</h1>
+    <p>Pulsa <kbd>Espacio</kbd> o el botón para generar. Haz clic en un código para copiarlo.</p>
+    <div class="controles">
+      <label for="armonia">Armonía</label>
+      <select id="armonia"></select>
+      <button id="generar">Generar</button>
+      <span id="aviso" role="status"></span>
+    </div>
+  </header>
+
+  <main>
+    <section id="paleta" aria-label="Paleta de colores"></section>
+
+    <h2>Contraste (WCAG)</h2>
+    <table>
+      <thead>
+        <tr><th>Color</th><th>Sobre blanco</th><th>Sobre negro</th></tr>
+      </thead>
+      <tbody id="contrastes"></tbody>
+    </table>
+  </main>
+
+  <script src="colores.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

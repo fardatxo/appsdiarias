@@ -1,0 +1,87 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f4f4f6;
+  color: #1c1c22;
+}
+
+header, main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 { margin: 8px 0 4px; }
+h2 { margin-top: 32px; font-size: 1.1rem; }
+p { margin: 0 0 16px; color: #555; }
+
+.controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+select, #generar {
+  font: inherit;
+  padding: 8px 14px;
+  border: 1px solid #c9c9d2;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+#generar { background: #1c1c22; color: #fff; border-color: #1c1c22; }
+#aviso { color: #2c6e49; min-height: 1.2em; }
+
+/* Las cinco tarjetas de color, una al lado de otra (en columna en móvil). */
+#paleta {
+  display: flex;
+  min-height: 260px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.color {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+}
+
+.color button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.color .codigo { font-family: monospace; font-size: 1.05rem; border-color: transparent; }
+.color .candado[aria-pressed="true"] { font-weight: bold; border-width: 2px; }
+
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e6e6ec; }
+td { font-family: monospace; }
+
+.muestra {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  border-radius: 3px;
+  vertical-align: middle;
+  border: 1px solid #0002;
+}
+
+@media (max-width: 600px) {
+  #paleta { flex-direction: column; }
+  .color { flex-direction: row; justify-content: space-between; min-height: 64px; }
+}
