@@ -17,7 +17,7 @@ así que el alcance está ajustado a 2 hitos.
 
 - Python 3
 - numpy (k-NN y métricas a mano)
-- scikit-learn (solo el dataset hoy; modelos de comparación en el hito 2)
+- scikit-learn (dataset y modelos de comparación)
 - matplotlib (gráficas en PNG)
 - pytest (tests)
 
@@ -27,12 +27,15 @@ así que el alcance está ajustado a 2 hitos.
   carga del dataset, división train/test estratificada hecha a mano, k-NN desde cero con
   numpy, métricas (exactitud y matriz de confusión), CLI con `evaluar`, `buscar-k`
   (gráfica exactitud vs. k) y `ver` (dígito en ASCII + predicción), tests y README inicial.
-- [ ] **Día 2 (dom)** — Comparación y cierre: comparar el k-NN propio con modelos de
+- [x] **Día 2 (dom 2026-11-15)** — Comparación y cierre: comparar el k-NN propio con modelos de
   scikit-learn (regresión logística, SVM, bosque aleatorio), precisión/recall por clase,
   matriz de confusión como imagen PNG, galería de los errores del modelo, demo `dibujar`
   (clasifica un dígito 8×8 escrito en un fichero de texto), pulido, más tests y README final.
+  También se han hecho las dos ideas extra.
 
-## Ideas extra (si sobra tiempo)
+**Proyecto terminado.**
 
-- k-NN ponderado por distancia (los vecinos cercanos votan más).
-- Validación cruzada para elegir `k` sin mirar el conjunto de test.
+## Ideas extra
+
+- [x] k-NN ponderado por distancia (los vecinos cercanos votan más): opción `--ponderado`.
+- [x] Validación cruzada para elegir `k` sin mirar el conjunto de test: `buscar-k`.
