@@ -8,6 +8,7 @@ Las primeras carpetas del repo son de la etapa anterior, cuando se hacía una ap
 
 | Fecha de inicio | Proyecto | Tecnología | Estado | Descripción |
 |-----------------|----------|------------|--------|-------------|
+| 2026-11-16 | [biblioteca-api](2026-11-16-biblioteca-api/) | Java | 🚧 en curso | API REST de una biblioteca en Java puro, sin frameworks: servidor HTTP del JDK, JSON hecho a mano, persistencia en fichero y tests de integración. |
 | 2026-11-14 | [clasificador-digitos](2026-11-14-clasificador-digitos/) | IA · Python (numpy, scikit-learn) | ✅ terminado | Clasificador de dígitos manuscritos con k-NN implementado a mano: validación cruzada, métricas por clase, comparación con scikit-learn y demo para clasificar dígitos dibujados en texto. |
 | 2026-11-13 | [gestor-gastos-cli](2026-11-13-gestor-gastos-cli/) | Python | ✅ terminado | Gestor de gastos por terminal: añade, lista, borra y resume gastos por categoría con gráfico de barras, guardando en JSON. |
 | 2026-11-12 | [generador-paletas](2026-11-12-generador-paletas/) | Web (HTML/CSS/JS) | ✅ terminado | Generador de paletas de color por armonías, con fijado de colores, copia al portapapeles y contraste WCAG. |
