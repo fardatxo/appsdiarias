@@ -28,11 +28,15 @@ Proyecto del bloque A (lunes a miércoles): 3 hitos, uno por día.
   persistencia en fichero JSON, servidor con `GET /api/libros`, `GET /api/libros/{id}`,
   `POST /api/libros` y `GET /api/salud`, errores en JSON (400/404/405), tests unitarios y de
   integración, scripts y README inicial.
-- [ ] **Día 2 (mar 2026-11-17)** — CRUD completo y préstamos: `PUT` y `DELETE` de libros,
-  búsqueda y filtros por query string (`?q=`, `?autor=`, `?disponible=`), y préstamos
-  (`POST /api/libros/{id}/prestamo` para prestar a una persona, `DELETE` para devolver,
-  `GET /api/prestamos` para ver los activos) con sus reglas (no prestar un libro ya prestado,
-  409 en conflictos). Tests de todo lo nuevo.
+- [x] **Día 2 (mar 2026-11-17)** — CRUD completo y préstamos: `PUT` y `DELETE` de libros,
+  búsqueda y filtros por query string (`?q=`, `?autor=`, `?disponible=`, sin distinguir
+  mayúsculas ni tildes), y préstamos (`POST /api/libros/{id}/prestamo` para prestar a una
+  persona, `DELETE` para devolver, `GET /api/prestamos` para ver los activos y
+  `?vencidos=true`) con sus reglas (no prestar un libro ya prestado ni borrarlo, 409 en
+  conflictos). Además: se arregla el `.gitignore` (la regla `datos/` dejaba fuera del repo
+  `src/biblioteca/datos/RepositorioLibros.java` y el día 1 no compilaba desde un clon
+  limpio), guardado atómico del fichero, clase base `Manejador` que traduce excepciones a
+  400/404/409/500 y cabecera `Allow` en los 405. 50 tests en total.
 - [ ] **Día 3 (mié 2026-11-18)** — Cliente y cierre: cliente de terminal (`listar`, `ver`,
   `crear`, `borrar`, `prestar`, `devolver`) que habla con la API, pulido (mensajes, casos
   límite), más tests y README final con "qué se aprende".

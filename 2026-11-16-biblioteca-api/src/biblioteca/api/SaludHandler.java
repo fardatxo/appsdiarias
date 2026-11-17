@@ -26,6 +26,7 @@ class SaludHandler implements HttpHandler {
         Map<String, Object> cuerpo = new LinkedHashMap<>();
         cuerpo.put("estado", "ok");
         cuerpo.put("libros", repositorio.total());
+        cuerpo.put("prestamos", repositorio.prestamosActivos().size());
         Respuestas.json(intercambio, 200, cuerpo);
     }
 }

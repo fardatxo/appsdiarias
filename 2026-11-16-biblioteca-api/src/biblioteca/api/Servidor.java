@@ -17,7 +17,9 @@ public class Servidor {
     /** Con puerto 0 el sistema elige un puerto libre (lo usan los tests). */
     public Servidor(int puerto, RepositorioLibros repositorio) throws IOException {
         http = HttpServer.create(new InetSocketAddress(puerto), 0);
-        http.createContext("/api/libros", new LibrosHandler(repositorio));
+        PrestamosHandler prestamos = new PrestamosHandler(repositorio);
+        http.createContext("/api/libros", new LibrosHandler(repositorio, prestamos));
+        http.createContext("/api/prestamos", prestamos);
         http.createContext("/api/salud", new SaludHandler(repositorio));
         // Cualquier otra ruta: 404 en JSON
         http.createContext("/", intercambio ->
