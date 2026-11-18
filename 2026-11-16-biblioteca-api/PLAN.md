@@ -37,11 +37,16 @@ Proyecto del bloque A (lunes a miércoles): 3 hitos, uno por día.
   `src/biblioteca/datos/RepositorioLibros.java` y el día 1 no compilaba desde un clon
   limpio), guardado atómico del fichero, clase base `Manejador` que traduce excepciones a
   400/404/409/500 y cabecera `Allow` en los 405. 50 tests en total.
-- [ ] **Día 3 (mié 2026-11-18)** — Cliente y cierre: cliente de terminal (`listar`, `ver`,
-  `crear`, `borrar`, `prestar`, `devolver`) que habla con la API, pulido (mensajes, casos
-  límite), más tests y README final con "qué se aprende".
+- [x] **Día 3 (mié 2026-11-18)** — Cliente y cierre: `ClienteApi` (cliente Java de la API con
+  `java.net.http.HttpClient`, errores tipados con código y mensaje) y cliente de terminal
+  `cliente.sh` con 10 subcomandos (`listar`, `ver`, `crear`, `editar`, `borrar`, `prestar`,
+  `devolver`, `prestamos`, `estadisticas`, `salud`), salida en tablas alineadas y códigos de
+  salida 0/1/2. Extra del plan: `GET /api/estadisticas` (disponibles, prestados, vencidos,
+  libros por autor y por década). Pulido: cabecera `Allow` también en `/api/salud`. 67 tests
+  (17 nuevos: estadísticas, cliente Java y CLI contra un servidor real) y README final.
 
 ## Ideas extra (si sobra tiempo)
 
 - Paginación de la lista (`?pagina=` y `?tamano=`).
-- Estadísticas en `GET /api/estadisticas` (libros por autor, prestados vs. disponibles).
+- ~~Estadísticas en `GET /api/estadisticas`~~ (hecho el día 3).
+- Historial de préstamos devueltos por libro.

@@ -1,6 +1,8 @@
 package biblioteca;
 
 import biblioteca.api.Servidor;
+import biblioteca.cliente.ClienteApi;
+import biblioteca.cliente.ClienteCli;
 import biblioteca.datos.ConflictoException;
 import biblioteca.datos.NoEncontradoException;
 import biblioteca.datos.RepositorioLibros;
@@ -10,10 +12,13 @@ import biblioteca.modelo.Libro;
 import biblioteca.modelo.Prestamo;
 import biblioteca.modelo.ValidacionException;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -45,6 +50,7 @@ public class Pruebas {
         pruebasApi();
         pruebasCrudYPrestamos();
         pruebasApiDia2();
+        pruebasDia3();
 
         System.out.println();
         System.out.println(pasadas + " pruebas pasadas, " + falladas + " falladas");
@@ -410,6 +416,175 @@ public class Pruebas {
             });
         } finally {
             servidor.parar();
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Día 3: estadísticas, ClienteApi y cliente de terminal
+    // ---------------------------------------------------------------
+
+    /** Resultado de ejecutar el CLI: código de salida y lo que ha escrito. */
+    record Salida(int codigo, String out, String err) {
+    }
+
+    private static Salida cli(String base, String... args) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        String[] completos = new String[args.length + 2];
+        completos[0] = "--url";
+        completos[1] = base;
+        System.arraycopy(args, 0, completos, 2, args.length);
+        int codigo = new ClienteCli(new PrintStream(out, true, StandardCharsets.UTF_8),
+                new PrintStream(err, true, StandardCharsets.UTF_8)).ejecutar(completos);
+        return new Salida(codigo, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
+    }
+
+    private static void contiene(String texto, String trozo) {
+        if (!texto.contains(trozo)) {
+            throw new AssertionError("se esperaba que contuviera «" + trozo + "» pero era:\n" + texto);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void pruebasDia3() throws Exception {
+        // Preparamos un préstamo vencido: se presta el 1 de noviembre a 7 días y se
+        // recarga el fichero con el reloj a 17 de noviembre.
+        Path carpeta = Files.createTempDirectory("biblioteca-dia3");
+        Path fichero = carpeta.resolve("datos.json");
+        RepositorioLibros antes = new RepositorioLibros(fichero, relojFijo("2026-11-01"));
+        antes.crear("Cien años de soledad", "Gabriel García Márquez", 1967, "978-84-376-0495-4");
+        antes.crear("El amor en los tiempos del cólera", "Gabriel García Márquez", 1985, "");
+        antes.crear("Rayuela", "Julio Cortázar", 1963, "");
+        antes.prestar(3, "Pablo", 7);
+        RepositorioLibros repo = new RepositorioLibros(fichero, relojFijo("2026-11-17"));
+
+        Servidor servidor = new Servidor(0, repo);
+        servidor.arrancar();
+        String base = "http://localhost:" + servidor.puerto();
+        HttpClient http = HttpClient.newHttpClient();
+        ClienteApi api = new ClienteApi(base + "/"); // la barra final no debe molestar
+        try {
+            prueba("api: GET /api/estadisticas", () -> {
+                HttpResponse<String> r = pedir(http, "GET", base + "/api/estadisticas", null);
+                igual(200, r.statusCode());
+                Map<String, Object> e = (Map<String, Object>) Json.leer(r.body());
+                igual(3L, e.get("libros"));
+                igual(2L, e.get("disponibles"));
+                igual(1L, e.get("prestados"));
+                igual(1L, e.get("vencidos"));
+                Map<String, Object> primero = (Map<String, Object>) ((List<Object>) e.get("porAutor")).get(0);
+                igual("Gabriel García Márquez", primero.get("autor"));
+                igual(2L, primero.get("libros"));
+                igual(List.of("1960s", "1980s"),
+                        List.copyOf(((Map<String, Object>) e.get("porDecada")).keySet()));
+                igual(405, pedir(http, "POST", base + "/api/estadisticas", "{}").statusCode());
+            });
+            prueba("api: /api/salud con método incorrecto -> 405 con Allow", () -> {
+                HttpResponse<String> r = pedir(http, "POST", base + "/api/salud", "{}");
+                igual(405, r.statusCode());
+                igual("GET", r.headers().firstValue("Allow").orElse(""));
+            });
+            prueba("ClienteApi: listar con filtros codifica tildes y espacios", () -> {
+                igual(2, api.listar("garcía márquez", null, null).size());
+                igual(1, api.listar(null, "Cortázar", false).size());
+                igual(3, api.listar("", null, null).size()); // vacío = sin filtro
+            });
+            prueba("ClienteApi: los errores llevan código y mensaje de la API", () -> {
+                try {
+                    api.ver(99);
+                    throw new AssertionError("debía fallar");
+                } catch (ClienteApi.ErrorApi e) {
+                    igual(404, e.estado());
+                    igual("No existe el libro con id 99", e.getMessage());
+                }
+            });
+            prueba("ClienteApi: servidor apagado -> IOException (no se cuelga)", () ->
+                    debeLanzar(java.io.IOException.class, () -> new ClienteApi("http://localhost:1").salud()));
+
+            prueba("cli: sin argumentos muestra la ayuda y sale con 2", () -> {
+                Salida s = cli(base);
+                igual(2, s.codigo());
+                contiene(s.out(), "Comandos:");
+            });
+            prueba("cli: listar pinta una tabla", () -> {
+                Salida s = cli(base, "listar");
+                igual(0, s.codigo());
+                contiene(s.out(), "TÍTULO");
+                contiene(s.out(), "Rayuela");
+                contiene(s.out(), "3 libros");
+            });
+            prueba("cli: listar --prestados y --buscar", () -> {
+                Salida s = cli(base, "listar", "--prestados");
+                contiene(s.out(), "1 libro");
+                contiene(s.out(), "Rayuela");
+                igual("No hay libros que coincidan.\n", cli(base, "listar", "--buscar", "tolkien").out());
+            });
+            prueba("cli: crear y ver", () -> {
+                Salida s = cli(base, "crear", "--titulo", "Ficciones", "--autor", "Jorge Luis Borges",
+                        "--anio=1944");
+                igual(0, s.codigo());
+                contiene(s.out(), "Libro creado con id 4");
+                contiene(cli(base, "ver", "4").out(), "Jorge Luis Borges");
+            });
+            prueba("cli: crear sin campos obligatorios -> 2 sin llamar a la API", () -> {
+                Salida s = cli(base, "crear", "--titulo", "Sin autor", "--anio", "2000");
+                igual(2, s.codigo());
+                contiene(s.err(), "Falta --autor");
+                igual(2, cli(base, "crear", "--titulo", "T", "--autor", "A", "--anio", "dos mil").codigo());
+                igual(4, repo.total());
+            });
+            prueba("cli: editar cambia solo los campos indicados", () -> {
+                igual(0, cli(base, "editar", "4", "--anio", "1956").codigo());
+                Libro libro = repo.buscarPorId(4).orElseThrow();
+                igual(1956, libro.anio());
+                igual("Ficciones", libro.titulo());
+                igual(2, cli(base, "editar", "4").codigo()); // sin campos: uso incorrecto
+            });
+            prueba("cli: prestar, ver quién lo tiene y devolver", () -> {
+                Salida s = cli(base, "prestar", "4", "Ana López", "--dias", "10");
+                igual(0, s.codigo());
+                contiene(s.out(), "Devolver antes del 2026-11-27");
+                contiene(cli(base, "ver", "4").out(), "Prestado a: Ana López");
+                contiene(cli(base, "devolver", "4").out(), "Devuelto «Ficciones»");
+            });
+            prueba("cli: prestamos --vencidos marca el retraso", () -> {
+                Salida s = cli(base, "prestamos", "--vencidos");
+                contiene(s.out(), "Pablo");
+                contiene(s.out(), "VENCIDO");
+                contiene(cli(base, "devolver", "3").out(), "con retraso");
+                igual("No hay préstamos activos.\n", cli(base, "prestamos").out());
+            });
+            prueba("cli: errores de la API -> código 1 y mensaje", () -> {
+                Salida s = cli(base, "ver", "99");
+                igual(1, s.codigo());
+                contiene(s.err(), "Error 404");
+                igual(1, cli(base, "devolver", "1").codigo()); // no estaba prestado: 409
+            });
+            prueba("cli: argumentos incorrectos -> código 2", () -> {
+                igual(2, cli(base, "ver", "abc").codigo());
+                igual(2, cli(base, "ver").codigo());
+                igual(2, cli(base, "ver", "1", "2").codigo());
+                igual(2, cli(base, "listar", "--disponibles", "--prestados").codigo());
+                igual(2, cli(base, "listar", "--color", "rojo").codigo());
+                igual(2, cli(base, "prestar", "1").codigo());
+                igual(2, cli(base, "volar").codigo());
+            });
+            prueba("cli: borrar y estadísticas", () -> {
+                igual(0, cli(base, "borrar", "4").codigo());
+                Salida s = cli(base, "estadisticas");
+                contiene(s.out(), "Libros: 3");
+                contiene(s.out(), "Gabriel García Márquez");
+                contiene(s.out(), "1980s");
+            });
+            prueba("cli: servidor apagado -> mensaje claro y código 1", () -> {
+                Salida s = cli("http://localhost:1", "salud");
+                igual(1, s.codigo());
+                contiene(s.err(), "No se puede conectar");
+            });
+        } finally {
+            servidor.parar();
+            Files.deleteIfExists(fichero);
+            Files.deleteIfExists(carpeta);
         }
     }
 

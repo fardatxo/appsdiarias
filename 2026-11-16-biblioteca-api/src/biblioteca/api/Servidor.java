@@ -20,6 +20,7 @@ public class Servidor {
         PrestamosHandler prestamos = new PrestamosHandler(repositorio);
         http.createContext("/api/libros", new LibrosHandler(repositorio, prestamos));
         http.createContext("/api/prestamos", prestamos);
+        http.createContext("/api/estadisticas", new EstadisticasHandler(repositorio));
         http.createContext("/api/salud", new SaludHandler(repositorio));
         // Cualquier otra ruta: 404 en JSON
         http.createContext("/", intercambio ->

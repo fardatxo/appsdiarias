@@ -20,7 +20,8 @@ class SaludHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange intercambio) throws IOException {
         if (!"GET".equals(intercambio.getRequestMethod())) {
-            Respuestas.error(intercambio, 405, "Método no permitido");
+            intercambio.getResponseHeaders().set("Allow", "GET");
+            Respuestas.error(intercambio, 405, "Método no permitido. Usa: GET");
             return;
         }
         Map<String, Object> cuerpo = new LinkedHashMap<>();
