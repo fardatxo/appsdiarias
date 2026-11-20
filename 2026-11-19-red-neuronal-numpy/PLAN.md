@@ -29,10 +29,14 @@ Bloque B (jueves-domingo): 4 días, 4 hitos.
   métricas (exactitud, matriz de confusión, precisión/recall/F1, entropía cruzada),
   CLI `datos` / `entrenar` / `comparar`, frontera de decisión en ASCII y en PNG,
   curvas de aprendizaje, 25 tests y README inicial.
-- [ ] **Día 2 (vie 2026-11-20)** — Red multicapa: capas densas, activaciones (ReLU, tanh,
+- [x] **Día 2 (vie 2026-11-20)** — Red multicapa: capas densas, activaciones (ReLU, tanh,
   sigmoide), forward y **backpropagation** a mano, comprobación numérica de gradientes,
   entrenamiento por mini-lotes. Resolver `xor`, `lunas` y `circulos` y comparar con la
   neurona sola (`comparar` con columna MLP).
+  *Hecho:* `red/mlp.py` (capas `Densa` y `Activacion`, `MLP` con mini-lotes y L2,
+  `comprobar_gradientes`), CLI `entrenar --modelo mlp --ocultas 16,16 --activacion tanh`,
+  `comparar` con columna MLP, comando extra `capacidad` (exactitud según nº de neuronas
+  ocultas) y `gradientes` (backprop vs. diferencias finitas), 24 tests nuevos (49 en total).
 - [ ] **Día 3 (sáb 2026-11-21)** — Entrenar mejor: optimizadores (SGD, momentum, Adam),
   inicialización He/Xavier, regularización L2, conjunto de validación y parada temprana.
   Softmax multiclase y prueba con el dataset `digits` (8×8). Gráficas comparando
