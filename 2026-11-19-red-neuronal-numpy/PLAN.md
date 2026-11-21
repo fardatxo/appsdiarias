@@ -37,10 +37,17 @@ Bloque B (jueves-domingo): 4 días, 4 hitos.
   `comprobar_gradientes`), CLI `entrenar --modelo mlp --ocultas 16,16 --activacion tanh`,
   `comparar` con columna MLP, comando extra `capacidad` (exactitud según nº de neuronas
   ocultas) y `gradientes` (backprop vs. diferencias finitas), 24 tests nuevos (49 en total).
-- [ ] **Día 3 (sáb 2026-11-21)** — Entrenar mejor: optimizadores (SGD, momentum, Adam),
+- [x] **Día 3 (sáb 2026-11-21)** — Entrenar mejor: optimizadores (SGD, momentum, Adam),
   inicialización He/Xavier, regularización L2, conjunto de validación y parada temprana.
   Softmax multiclase y prueba con el dataset `digits` (8×8). Gráficas comparando
   optimizadores.
+  *Hecho:* `red/optimizadores.py` (SGD, Momentum, Adam con corrección de sesgo),
+  inicializaciones `lecun`/`xavier`/`he`/`pequena`, validación interna estratificada con
+  parada temprana que restaura los pesos de la mejor época, salida softmax + entropía
+  cruzada categórica (detección automática de multiclase), métricas multiclase.
+  Comandos nuevos `optimizadores`, `inicializacion` y `digitos` (97.11 % en test) y
+  opciones `--optimizador --init --validacion --paciencia` en `entrenar`. 25 tests nuevos
+  (74 en total).
 - [ ] **Día 4 (dom 2026-11-22)** — Demo y cierre: guardar/cargar el modelo (`.npz`),
   comando para predecir puntos o dígitos, comparación con `MLPClassifier` de scikit-learn,
   pulido, más tests y README final con métricas reales y "qué se aprende".

@@ -48,3 +48,31 @@ def formatear_matriz(m):
         f"  real 0   {m[0, 0]:>8}{m[0, 1]:>8}\n"
         f"  real 1   {m[1, 0]:>8}{m[1, 1]:>8}"
     )
+
+
+# --- Multiclase ---------------------------------------------------------------
+
+def entropia_cruzada_categorica(y_real, probabilidades, eps=1e-12):
+    """Log-loss multiclase: −media(log P[clase real]). y_real son índices 0..k-1."""
+    P = np.clip(np.asarray(probabilidades, dtype=float), eps, 1.0)
+    y = np.asarray(y_real, dtype=int)
+    return float(-np.mean(np.log(P[np.arange(len(y)), y])))
+
+
+def matriz_confusion_multiclase(y_real, y_pred, n_clases=None):
+    """Matriz k×k: fila = clase real, columna = clase predicha."""
+    y_real, y_pred = np.asarray(y_real, dtype=int), np.asarray(y_pred, dtype=int)
+    if n_clases is None:
+        n_clases = int(max(y_real.max(), y_pred.max())) + 1
+    m = np.zeros((n_clases, n_clases), dtype=int)
+    np.add.at(m, (y_real, y_pred), 1)
+    return m
+
+
+def formatear_matriz_multiclase(m):
+    """Matriz k×k en texto con las clases como cabecera."""
+    k = len(m)
+    lineas = ["real\\pred" + "".join(f"{j:>5}" for j in range(k))]
+    for i in range(k):
+        lineas.append(f"{i:>9}" + "".join(f"{m[i, j]:>5}" for j in range(k)))
+    return "\n".join(lineas)

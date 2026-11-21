@@ -10,23 +10,44 @@ Uso:
     python main.py comparar [--ruido 0.2]
     python main.py capacidad [--dataset circulos]
     python main.py gradientes [--activacion tanh]
+    python main.py optimizadores [--dataset lunas] [--epocas 100] [--graficas]
+    python main.py inicializacion [--activacion tanh] [--capas 8]
+    python main.py digitos [--optimizador adam] [--ocultas 32] [--paciencia 15] [--graficas]
 """
 
 import argparse
 import sys
 from pathlib import Path
 
-from red.datos import DATASETS, generar, preparar
+import numpy as np
+
+from red.datos import DATASETS, generar, preparar, preparar_digitos
 from red.lineales import Perceptron, RegresionLogistica
-from red.mlp import ACTIVACIONES, MLP, comprobar_gradientes
 from red.metricas import (
     entropia_cruzada_binaria,
+    entropia_cruzada_categorica,
     exactitud,
     formatear_matriz,
+    formatear_matriz_multiclase,
     matriz_confusion,
+    matriz_confusion_multiclase,
     precision_recall_f1,
 )
-from red.visual import frontera_ascii, grafica_frontera, grafica_historial
+from red.mlp import (
+    ACTIVACIONES,
+    INICIALIZACIONES,
+    MLP,
+    comprobar_gradientes,
+    desviacion_activaciones,
+)
+from red.optimizadores import OPTIMIZADORES
+from red.visual import (
+    frontera_ascii,
+    grafica_curvas,
+    grafica_errores_digitos,
+    grafica_frontera,
+    grafica_historial,
+)
 
 RAIZ = Path(__file__).parent
 CARPETA_GRAFICAS = RAIZ / "graficas"
@@ -35,7 +56,7 @@ CARPETA_GRAFICAS = RAIZ / "graficas"
 DEFECTOS = {
     "perceptron": {"tasa": 0.1, "epocas": 50},
     "logistica": {"tasa": 0.5, "epocas": 300},
-    "mlp": {"tasa": 0.1, "epocas": 500},
+    "mlp": {"tasa": None, "epocas": 500},  # tasa None = la del optimizador
 }
 
 
@@ -56,7 +77,8 @@ def leer_ocultas(texto):
 def crear_modelo(nombre, tasa=None, epocas=None, **extra):
     """Fábrica de modelos a partir de su nombre en la CLI.
 
-    `extra` son opciones solo del MLP (ocultas, activacion, tam_lote, l2)."""
+    `extra` son opciones solo del MLP (ocultas, activacion, tam_lote, l2,
+    optimizador, inicializacion, validacion, paciencia)."""
     if nombre not in DEFECTOS:
         raise ValueError(f"Modelo desconocido: {nombre!r}")
     opciones = dict(DEFECTOS[nombre])
@@ -64,7 +86,7 @@ def crear_modelo(nombre, tasa=None, epocas=None, **extra):
         opciones["tasa"] = tasa
     if epocas is not None:
         opciones["epocas"] = epocas
-    if opciones["tasa"] <= 0 or opciones["epocas"] <= 0:
+    if (opciones["tasa"] is not None and opciones["tasa"] <= 0) or opciones["epocas"] <= 0:
         raise ValueError("--tasa y --epocas deben ser positivos")
     if nombre == "mlp":
         return MLP(**opciones, **{k: v for k, v in extra.items() if v is not None})
@@ -87,7 +109,9 @@ def cmd_entrenar(args):
     extra = {}
     if args.modelo == "mlp":
         extra = {"ocultas": leer_ocultas(args.ocultas), "activacion": args.activacion,
-                 "tam_lote": args.lote, "l2": args.l2}
+                 "tam_lote": args.lote, "l2": args.l2, "optimizador": args.optimizador,
+                 "inicializacion": args.init, "validacion": args.validacion,
+                 "paciencia": args.paciencia}
     modelo = crear_modelo(args.modelo, args.tasa, args.epocas, **extra).entrenar(
         X_train, y_train)
     pred_train = modelo.predecir(X_train)
@@ -99,7 +123,12 @@ def cmd_entrenar(args):
         arquitectura = " -> ".join(str(n) for n in (2, *modelo.ocultas, 1))
         print(f"Arquitectura: {arquitectura} ({modelo.activacion}), "
               f"{modelo.num_parametros()} parámetros")
+        print(f"Optimizador: {modelo.optimizador} (tasa {modelo.tasa:g}), "
+              f"inicialización {modelo.inicializacion}")
     print(f"Épocas realizadas: {len(modelo.historial)}")
+    if isinstance(modelo, MLP) and modelo.mejor_epoca:
+        print(f"Mejor época en validación: {modelo.mejor_epoca}"
+              + (" (pesos restaurados)" if modelo.paciencia else ""))
     if isinstance(modelo, (RegresionLogistica, MLP)):
         perdida = entropia_cruzada_binaria(y_test, modelo.probabilidades(X_test))
         print(f"Pérdida (entropía cruzada) en test: {perdida:.4f}")
@@ -173,6 +202,96 @@ def cmd_gradientes(args):
     return 0 if todo_bien else 1
 
 
+def cmd_optimizadores(args):
+    """Mismo MLP y mismos datos, tres optimizadores distintos."""
+    X_train, X_test, y_train, y_test = preparar(args.dataset, ruido=args.ruido)
+    print(f"Dataset '{args.dataset}': MLP 2 -> 16 -> 16 -> 1 (tanh), "
+          f"{args.epocas} épocas, lotes de 32\n")
+    print(f"{'optimizador':<12} {'tasa':>6} {'pérdida ép.10':>14} "
+          f"{'pérdida final':>14} {'test':>8}")
+    curvas = {}
+    for nombre in OPTIMIZADORES:
+        modelo = MLP(ocultas=(16, 16), optimizador=nombre, epocas=args.epocas)
+        modelo.entrenar(X_train, y_train)
+        curvas[nombre] = modelo.historial
+        decima = modelo.historial[min(9, len(modelo.historial) - 1)]
+        print(f"{nombre:<12} {modelo.tasa:>6g} {decima:>14.4f} "
+              f"{modelo.historial[-1]:>14.4f} "
+              f"{exactitud(y_test, modelo.predecir(X_test)):>8.2%}")
+    print("\nMomentum y Adam bajan la pérdida de train mucho antes que SGD: aprovechan"
+          "\nla inercia (y Adam, además, adapta el paso de cada peso). Ojo: menos"
+          "\npérdida en train no garantiza más exactitud en test (sobreajuste).")
+    if args.graficas:
+        ruta = grafica_curvas(curvas, "pérdida en train (escala log)",
+                              f"Optimizadores en '{args.dataset}'",
+                              CARPETA_GRAFICAS / f"optimizadores_{args.dataset}.png",
+                              log=True)
+        print(f"\nGráfica guardada en {ruta.relative_to(RAIZ)}")
+
+
+def cmd_inicializacion(args):
+    """Cómo influye la escala de los pesos iniciales en una red profunda."""
+    X_train, _, y_train, _ = preparar("circulos")
+    ocultas = (32,) * args.capas
+    print(f"Red profunda: {args.capas} capas ocultas de 32 ({args.activacion}), "
+          f"dataset 'circulos'\n")
+    print("Desviación típica de las activaciones al inicio (capa 1 → última)"
+          " y pérdida tras 30 épocas de SGD:\n")
+    print(f"{'inicialización':<15} {'capa 1':>8} {'mitad':>8} {'última':>8} "
+          f"{'pérdida inicial':>16} {'pérdida final':>14}")
+    for nombre in INICIALIZACIONES:
+        modelo = MLP(ocultas=ocultas, activacion=args.activacion,
+                     inicializacion=nombre, epocas=30, tasa=0.05)
+        modelo.construir(2)
+        d = desviacion_activaciones(modelo, X_train)
+        inicial = modelo.perdida(X_train, y_train.astype(float))
+        modelo.entrenar(X_train, y_train)
+        print(f"{nombre:<15} {d[0]:>8.3f} {d[len(d) // 2]:>8.3f} {d[-1]:>8.3f} "
+              f"{inicial:>16.4f} {modelo.historial[-1]:>14.4f}")
+    print("\nCon pesos diminutos ('pequena') la señal se apaga capa a capa, los"
+          "\ngradientes también y la red no aprende (se queda en log 2 ≈ 0.693)."
+          "\nXavier (tanh/sigmoide) y He (ReLU) mantienen la escala de la señal.")
+
+
+def cmd_digitos(args):
+    """MLP multiclase con softmax sobre el dataset digits (imágenes 8×8)."""
+    X_train, X_test, y_train, y_test = preparar_digitos()
+    ocultas = leer_ocultas(args.ocultas)
+    modelo = MLP(ocultas=ocultas, activacion=args.activacion, optimizador=args.optimizador,
+                 tasa=args.tasa, epocas=args.epocas, l2=args.l2,
+                 inicializacion=args.init, validacion=0.2,
+                 paciencia=args.paciencia or None)
+    modelo.entrenar(X_train, y_train)
+    pred = modelo.predecir(X_test)
+    arquitectura = " -> ".join(str(n) for n in (64, *ocultas, 10))
+    print(f"Dígitos 8×8: train {len(X_train)} (20 % de ellos para validación), "
+          f"test {len(X_test)}")
+    print(f"Arquitectura: {arquitectura} (softmax), {modelo.num_parametros()} parámetros")
+    print(f"Optimizador: {modelo.optimizador} (tasa {modelo.tasa:g})")
+    print(f"Épocas: {len(modelo.historial)} · mejor época en validación: "
+          f"{modelo.mejor_epoca}")
+    perdida = entropia_cruzada_categorica(y_test, modelo.probabilidades(X_test))
+    print(f"Pérdida en test: {perdida:.4f}")
+    print(f"Exactitud test: {exactitud(y_test, pred):.2%}\n")
+    m = matriz_confusion_multiclase(y_test, pred, 10)
+    print("Matriz de confusión (test):")
+    print(formatear_matriz_multiclase(m))
+    aciertos = np.diag(m) / m.sum(axis=1)
+    print("\nExactitud por dígito: " + "  ".join(
+        f"{d}:{a:.0%}" for d, a in enumerate(aciertos)))
+
+    if args.graficas:
+        ruta = grafica_curvas({"train": modelo.historial, "validación": modelo.historial_val},
+                              "entropía cruzada", f"MLP en dígitos ({modelo.optimizador})",
+                              CARPETA_GRAFICAS / "digitos_curvas.png",
+                              marca=modelo.mejor_epoca)
+        print(f"\nGráfica guardada en {ruta.relative_to(RAIZ)}")
+        fallos = np.flatnonzero(pred != y_test)
+        ruta = grafica_errores_digitos(X_test[fallos], y_test[fallos], pred[fallos],
+                                       CARPETA_GRAFICAS / "digitos_errores.png")
+        print(f"Gráfica guardada en {ruta.relative_to(RAIZ)}")
+
+
 def construir_parser():
     parser = argparse.ArgumentParser(
         description="Redes neuronales desde cero con numpy")
@@ -193,6 +312,13 @@ def construir_parser():
                    help="activación de las capas ocultas del MLP")
     p.add_argument("--lote", type=int, default=32, help="tamaño del mini-lote (MLP)")
     p.add_argument("--l2", type=float, default=0.0, help="regularización L2 (MLP)")
+    p.add_argument("--optimizador", choices=list(OPTIMIZADORES), default="sgd")
+    p.add_argument("--init", choices=list(INICIALIZACIONES), default="lecun",
+                   help="inicialización de pesos (MLP)")
+    p.add_argument("--validacion", type=float, default=0.0,
+                   help="fracción de train apartada para validación (MLP)")
+    p.add_argument("--paciencia", type=int,
+                   help="épocas sin mejorar en validación antes de parar (MLP)")
     p.add_argument("--graficas", action="store_true",
                    help="guarda la frontera y la curva de aprendizaje en PNG")
     p.set_defaults(func=cmd_entrenar)
@@ -210,6 +336,31 @@ def construir_parser():
     p = sub.add_parser("gradientes", help="comprueba backprop numéricamente")
     p.add_argument("--activacion", choices=list(ACTIVACIONES), default="tanh")
     p.set_defaults(func=cmd_gradientes)
+
+    p = sub.add_parser("optimizadores", help="compara SGD, momentum y Adam")
+    p.add_argument("--dataset", choices=list(DATASETS), default="lunas")
+    p.add_argument("--epocas", type=int, default=100)
+    p.add_argument("--ruido", type=float, default=0.2)
+    p.add_argument("--graficas", action="store_true")
+    p.set_defaults(func=cmd_optimizadores)
+
+    p = sub.add_parser("inicializacion", help="efecto de la inicialización de pesos")
+    p.add_argument("--activacion", choices=list(ACTIVACIONES), default="tanh")
+    p.add_argument("--capas", type=int, default=8, help="nº de capas ocultas")
+    p.set_defaults(func=cmd_inicializacion)
+
+    p = sub.add_parser("digitos", help="MLP con softmax en el dataset digits")
+    p.add_argument("--ocultas", default="32")
+    p.add_argument("--activacion", choices=list(ACTIVACIONES), default="relu")
+    p.add_argument("--optimizador", choices=list(OPTIMIZADORES), default="adam")
+    p.add_argument("--init", choices=list(INICIALIZACIONES), default="he")
+    p.add_argument("--tasa", type=float)
+    p.add_argument("--epocas", type=int, default=200)
+    p.add_argument("--l2", type=float, default=0.0)
+    p.add_argument("--paciencia", type=int, default=15,
+                   help="parada temprana (0 = desactivada)")
+    p.add_argument("--graficas", action="store_true")
+    p.set_defaults(func=cmd_digitos)
     return parser
 
 

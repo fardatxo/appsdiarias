@@ -8,7 +8,7 @@ Las primeras carpetas del repo son de la etapa anterior, cuando se hacía una ap
 
 | Fecha de inicio | Proyecto | Tecnología | Estado | Descripción |
 |-----------------|----------|------------|--------|-------------|
-| 2026-11-19 | [red-neuronal-numpy](2026-11-19-red-neuronal-numpy/) | IA · Python (numpy) | 🚧 en curso | Redes neuronales desde cero con numpy: del perceptrón y la regresión logística a un MLP con backpropagation, optimizadores y demo. |
+| 2026-11-19 | [red-neuronal-numpy](2026-11-19-red-neuronal-numpy/) | IA · Python (numpy) | 🚧 en curso | Redes neuronales desde cero con numpy: del perceptrón y la regresión logística a un MLP con backpropagation, optimizadores (SGD, momentum, Adam), parada temprana y softmax para dígitos 8×8. |
 | 2026-11-16 | [biblioteca-api](2026-11-16-biblioteca-api/) | Java | ✅ terminado | API REST de una biblioteca en Java puro, sin frameworks: CRUD de libros, búsqueda con filtros, préstamos y estadísticas, JSON hecho a mano, persistencia en fichero, cliente de terminal y 67 tests. |
 | 2026-11-14 | [clasificador-digitos](2026-11-14-clasificador-digitos/) | IA · Python (numpy, scikit-learn) | ✅ terminado | Clasificador de dígitos manuscritos con k-NN implementado a mano: validación cruzada, métricas por clase, comparación con scikit-learn y demo para clasificar dígitos dibujados en texto. |
 | 2026-11-13 | [gestor-gastos-cli](2026-11-13-gestor-gastos-cli/) | Python | ✅ terminado | Gestor de gastos por terminal: añade, lista, borra y resume gastos por categoría con gráfico de barras, guardando en JSON. |

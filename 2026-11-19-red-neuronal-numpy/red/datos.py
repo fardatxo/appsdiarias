@@ -5,7 +5,7 @@ una semilla fija para que los resultados sean reproducibles.
 """
 
 import numpy as np
-from sklearn.datasets import make_blobs, make_circles, make_moons
+from sklearn.datasets import load_digits, make_blobs, make_circles, make_moons
 
 SEMILLA = 42
 
@@ -89,5 +89,19 @@ def preparar(nombre, n=400, ruido=0.2, semilla=SEMILLA):
     """Genera, divide y estandariza un dataset. Devuelve X_train, X_test, y_train, y_test."""
     X, y = generar(nombre, n=n, ruido=ruido, semilla=semilla)
     X_train, X_test, y_train, y_test = dividir(X, y, semilla=semilla)
+    escala = Estandarizador().ajustar(X_train)
+    return escala.transformar(X_train), escala.transformar(X_test), y_train, y_test
+
+
+def preparar_digitos(proporcion_test=0.25, semilla=SEMILLA):
+    """Dataset `digits` de scikit-learn: 1797 imágenes 8×8 de dígitos 0-9.
+
+    Cada imagen se aplana en 64 píxeles (valores 0-16). Se divide de forma
+    estratificada y se estandariza con la media/desviación de train.
+    Devuelve X_train, X_test, y_train, y_test.
+    """
+    digitos = load_digits()
+    X, y = digitos.data.astype(float), digitos.target.astype(int)
+    X_train, X_test, y_train, y_test = dividir(X, y, proporcion_test, semilla)
     escala = Estandarizador().ajustar(X_train)
     return escala.transformar(X_train), escala.transformar(X_test), y_train, y_test
