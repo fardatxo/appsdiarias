@@ -13,15 +13,29 @@ Uso:
     python main.py optimizadores [--dataset lunas] [--epocas 100] [--graficas]
     python main.py inicializacion [--activacion tanh] [--capas 8]
     python main.py digitos [--optimizador adam] [--ocultas 32] [--paciencia 15] [--graficas]
+                           [--guardar modelos/digitos.npz]
+    python main.py predecir --modelo modelos/lunas.npz [--punto 0.5,-0.2 ...]
+    python main.py predecir --modelo modelos/digitos.npz [--indice 3 | --dibujo ejemplos/siete.txt]
+    python main.py sklearn                    # nuestro MLP frente a MLPClassifier
 """
 
 import argparse
 import sys
+import time
+import warnings
 from pathlib import Path
 
 import numpy as np
 
-from red.datos import DATASETS, generar, preparar, preparar_digitos
+from red.datos import (
+    DATASETS,
+    dibujo_ascii,
+    dividir_digitos_crudos,
+    generar,
+    leer_dibujo,
+    preparar,
+    preparar_digitos,
+)
 from red.lineales import Perceptron, RegresionLogistica
 from red.metricas import (
     entropia_cruzada_binaria,
@@ -41,12 +55,14 @@ from red.mlp import (
     desviacion_activaciones,
 )
 from red.optimizadores import OPTIMIZADORES
+from red.persistencia import cargar_modelo, guardar_modelo
 from red.visual import (
     frontera_ascii,
     grafica_curvas,
     grafica_errores_digitos,
     grafica_frontera,
     grafica_historial,
+    grafica_pesos_digitos,
 )
 
 RAIZ = Path(__file__).parent
@@ -105,7 +121,10 @@ def cmd_datos(_args):
 
 def cmd_entrenar(args):
     """Entrena un modelo en un dataset y muestra su evaluación en test."""
-    X_train, X_test, y_train, y_test = preparar(args.dataset, ruido=args.ruido)
+    if args.guardar and args.modelo != "mlp":
+        raise ValueError("--guardar solo funciona con --modelo mlp")
+    X_train, X_test, y_train, y_test, escala = preparar(args.dataset, ruido=args.ruido,
+                                                        con_escala=True)
     extra = {}
     if args.modelo == "mlp":
         extra = {"ocultas": leer_ocultas(args.ocultas), "activacion": args.activacion,
@@ -152,6 +171,12 @@ def cmd_entrenar(args):
                                  f"Aprendizaje de {args.modelo} en '{args.dataset}'",
                                  CARPETA_GRAFICAS / f"historial_{base}.png")
         print(f"Gráfica guardada en {ruta.relative_to(RAIZ)}")
+
+    if args.guardar:
+        ruta = guardar_modelo(modelo, args.guardar, escala, info={
+            "tipo": "2d", "dataset": args.dataset, "ruido": args.ruido,
+            "exactitud_test": exactitud(y_test, pred_test)})
+        print(f"\nModelo guardado en {ruta}")
 
 
 def cmd_comparar(args):
@@ -255,7 +280,7 @@ def cmd_inicializacion(args):
 
 def cmd_digitos(args):
     """MLP multiclase con softmax sobre el dataset digits (imágenes 8×8)."""
-    X_train, X_test, y_train, y_test = preparar_digitos()
+    X_train, X_test, y_train, y_test, escala = preparar_digitos(con_escala=True)
     ocultas = leer_ocultas(args.ocultas)
     modelo = MLP(ocultas=ocultas, activacion=args.activacion, optimizador=args.optimizador,
                  tasa=args.tasa, epocas=args.epocas, l2=args.l2,
@@ -290,6 +315,145 @@ def cmd_digitos(args):
         ruta = grafica_errores_digitos(X_test[fallos], y_test[fallos], pred[fallos],
                                        CARPETA_GRAFICAS / "digitos_errores.png")
         print(f"Gráfica guardada en {ruta.relative_to(RAIZ)}")
+        ruta = grafica_pesos_digitos(modelo.densas()[0].W,
+                                     CARPETA_GRAFICAS / "digitos_pesos.png")
+        print(f"Gráfica guardada en {ruta.relative_to(RAIZ)}")
+
+    if args.guardar:
+        ruta = guardar_modelo(modelo, args.guardar, escala, info={
+            "tipo": "digitos", "exactitud_test": exactitud(y_test, pred)})
+        print(f"\nModelo guardado en {ruta}")
+
+
+# --- Predecir con un modelo guardado -----------------------------------------
+
+def leer_punto(texto):
+    """'0.5,-1' -> array([0.5, -1.0])."""
+    try:
+        x, y = (float(v) for v in texto.split(","))
+    except ValueError:
+        raise ValueError(f"--punto debe ser 'x,y' con dos números (no {texto!r})") from None
+    return np.array([x, y])
+
+
+def barra(probabilidad, ancho=20):
+    """Barra de texto proporcional a una probabilidad."""
+    return "█" * int(round(probabilidad * ancho))
+
+
+def mostrar_prediccion_digito(modelo, escala, pixeles, real=None):
+    """Imprime el dígito en ASCII y las 3 clases más probables."""
+    X = pixeles[None, :]
+    if escala is not None:
+        X = escala.transformar(X)
+    p = modelo.probabilidades(X)[0]
+    print(dibujo_ascii(pixeles))
+    print()
+    if real is not None:
+        print(f"Dígito real: {real}")
+    print(f"Predicción: {int(p.argmax())}  (confianza {p.max():.1%})")
+    for clase in np.argsort(p)[::-1][:3]:
+        print(f"  {clase}: {p[clase]:6.1%} {barra(p[clase])}")
+    return int(p.argmax())
+
+
+def cmd_predecir(args):
+    """Carga un modelo .npz y lo usa con datos nuevos."""
+    modelo, escala, info = cargar_modelo(args.modelo)
+    n_entrada = modelo.densas()[0].W.shape[0]
+    arquitectura = " -> ".join(str(n) for n in (n_entrada, *modelo.ocultas, modelo.n_salidas))
+    print(f"Modelo {args.modelo}: {arquitectura} ({modelo.activacion}), "
+          f"{modelo.num_parametros()} parámetros")
+    if "exactitud_test" in info:
+        print(f"Entrenado con '{info.get('dataset', 'digits')}', "
+              f"exactitud en test al guardarlo: {info['exactitud_test']:.2%}")
+    print()
+
+    if n_entrada == 2:
+        if args.indice is not None or args.dibujo:
+            raise ValueError("Este modelo es de puntos 2D: usa --punto x,y")
+        if not args.punto:
+            print("Sin --punto: frontera de decisión en el espacio estandarizado "
+                  "('#' = clase 1):")
+            print(frontera_ascii(modelo))
+            return 0
+        X = np.array([leer_punto(t) for t in args.punto])
+        p = modelo.probabilidades(escala.transformar(X) if escala else X)
+        for (x, y), prob in zip(X, p):
+            clase = int(prob >= 0.5)
+            print(f"  ({x:+.2f}, {y:+.2f}) -> clase {clase}  "
+                  f"P(clase 1) = {prob:.3f} {barra(prob)}")
+        return 0
+
+    if n_entrada == 64:
+        if args.punto:
+            raise ValueError("Este modelo es de dígitos: usa --indice o --dibujo")
+        if args.dibujo:
+            try:
+                texto = Path(args.dibujo).read_text(encoding="utf-8")
+            except OSError as error:
+                raise ValueError(f"No se puede leer {args.dibujo}: {error}") from None
+            mostrar_prediccion_digito(modelo, escala, leer_dibujo(texto))
+            return 0
+        _, X_test, _, y_test = dividir_digitos_crudos()
+        indice = args.indice if args.indice is not None else 0
+        if not 0 <= indice < len(X_test):
+            raise ValueError(f"--indice debe estar entre 0 y {len(X_test) - 1}")
+        print(f"Imagen de test nº {indice}:")
+        mostrar_prediccion_digito(modelo, escala, X_test[indice], real=int(y_test[indice]))
+        return 0
+
+    raise ValueError(f"Modelo con {n_entrada} entradas: no sé qué datos darle")
+
+
+# --- Comparación con scikit-learn ---------------------------------------------
+
+def _cronometrar(funcion):
+    inicio = time.perf_counter()
+    resultado = funcion()
+    return resultado, time.perf_counter() - inicio
+
+
+def cmd_sklearn(args):
+    """Nuestro MLP frente a MLPClassifier de scikit-learn con la misma configuración."""
+    from sklearn.exceptions import ConvergenceWarning
+    from sklearn.neural_network import MLPClassifier
+
+    print("Misma arquitectura, mismo optimizador (Adam, tasa 0.01), lotes de 32.\n")
+    print(f"{'dataset':<10} {'arquitectura':<18} {'numpy':>9} {'sklearn':>9} "
+          f"{'t numpy':>9} {'t sklearn':>10}")
+    casos = [(nombre, (16, 16), "tanh", False) for nombre in DATASETS]
+    casos.append(("digitos", (32,), "relu", True))
+    for nombre, ocultas, activacion, es_digitos in casos:
+        if es_digitos:
+            X_train, X_test, y_train, y_test = preparar_digitos()
+        else:
+            X_train, X_test, y_train, y_test = preparar(nombre, ruido=args.ruido)
+        # En dígitos ambos usan validación (20 %) y parada temprana (paciencia 15)
+        nuestro = MLP(ocultas=ocultas, activacion=activacion, optimizador="adam",
+                      tasa=0.01, epocas=args.epocas,
+                      inicializacion="he" if activacion == "relu" else "lecun",
+                      validacion=0.2 if es_digitos else 0.0,
+                      paciencia=15 if es_digitos else None)
+        suyo = MLPClassifier(hidden_layer_sizes=ocultas,
+                             activation="tanh" if activacion == "tanh" else "relu",
+                             solver="adam", learning_rate_init=0.01, batch_size=32,
+                             max_iter=args.epocas, alpha=0.0, random_state=42,
+                             early_stopping=es_digitos, validation_fraction=0.2,
+                             n_iter_no_change=15 if es_digitos else args.epocas)
+        _, t_nuestro = _cronometrar(lambda: nuestro.entrenar(X_train, y_train))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ConvergenceWarning)
+            _, t_suyo = _cronometrar(lambda: suyo.fit(X_train, y_train))
+        arquitectura = "-".join(str(n) for n in (X_train.shape[1], *ocultas,
+                                                 nuestro.n_salidas))
+        print(f"{nombre:<10} {arquitectura:<18} "
+              f"{exactitud(y_test, nuestro.predecir(X_test)):>9.2%} "
+              f"{exactitud(y_test, suyo.predict(X_test)):>9.2%} "
+              f"{t_nuestro:>8.2f}s {t_suyo:>9.2f}s")
+    print("\nLas diferencias pequeñas vienen de la inicialización aleatoria, el"
+          "\norden de los lotes y detalles de Adam/parada temprana: los dos hacen"
+          "\nlo mismo por dentro (forward, backprop y un paso del optimizador).")
 
 
 def construir_parser():
@@ -321,6 +485,8 @@ def construir_parser():
                    help="épocas sin mejorar en validación antes de parar (MLP)")
     p.add_argument("--graficas", action="store_true",
                    help="guarda la frontera y la curva de aprendizaje en PNG")
+    p.add_argument("--guardar", metavar="RUTA.npz",
+                   help="guarda el MLP entrenado (pesos + estandarización)")
     p.set_defaults(func=cmd_entrenar)
 
     p = sub.add_parser("comparar", help="todos los modelos en todos los datasets")
@@ -360,7 +526,21 @@ def construir_parser():
     p.add_argument("--paciencia", type=int, default=15,
                    help="parada temprana (0 = desactivada)")
     p.add_argument("--graficas", action="store_true")
+    p.add_argument("--guardar", metavar="RUTA.npz", help="guarda el modelo entrenado")
     p.set_defaults(func=cmd_digitos)
+
+    p = sub.add_parser("predecir", help="usa un modelo guardado con datos nuevos")
+    p.add_argument("--modelo", required=True, help="fichero .npz guardado con --guardar")
+    p.add_argument("--punto", action="append", metavar="X,Y",
+                   help="punto 2D en coordenadas originales (se puede repetir)")
+    p.add_argument("--indice", type=int, help="nº de imagen de test de digits")
+    p.add_argument("--dibujo", help="fichero de texto con un dígito de 8×8 caracteres")
+    p.set_defaults(func=cmd_predecir)
+
+    p = sub.add_parser("sklearn", help="compara con MLPClassifier de scikit-learn")
+    p.add_argument("--epocas", type=int, default=200)
+    p.add_argument("--ruido", type=float, default=0.2)
+    p.set_defaults(func=cmd_sklearn)
     return parser
 
 

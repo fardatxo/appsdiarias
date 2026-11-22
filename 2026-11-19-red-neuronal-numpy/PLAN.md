@@ -48,11 +48,17 @@ Bloque B (jueves-domingo): 4 días, 4 hitos.
   Comandos nuevos `optimizadores`, `inicializacion` y `digitos` (97.11 % en test) y
   opciones `--optimizador --init --validacion --paciencia` en `entrenar`. 25 tests nuevos
   (74 en total).
-- [ ] **Día 4 (dom 2026-11-22)** — Demo y cierre: guardar/cargar el modelo (`.npz`),
+- [x] **Día 4 (dom 2026-11-22)** — Demo y cierre: guardar/cargar el modelo (`.npz`),
   comando para predecir puntos o dígitos, comparación con `MLPClassifier` de scikit-learn,
   pulido, más tests y README final con métricas reales y "qué se aprende".
+  *Hecho:* `red/persistencia.py` (receta JSON + pesos + estandarización en `.npz`,
+  carga con `allow_pickle=False` y validación de formas), `--guardar` en `entrenar` y
+  `digitos`, comando `predecir` (puntos 2D en coordenadas originales, imagen de test por
+  índice o dígito dibujado en texto, con ejemplos en `ejemplos/`), comando `sklearn`
+  (numpy vs. `MLPClassifier`: 97.11 % frente a 97.78 % en dígitos), gráfica de pesos de
+  la capa oculta, 28 tests nuevos (102 en total) y README final.
 
 ## Ideas extra
 
 - [ ] Animación (serie de PNG) de cómo cambia la frontera durante el entrenamiento.
-- [ ] Visualizar qué aprende cada neurona de la capa oculta.
+- [x] Visualizar qué aprende cada neurona de la capa oculta (día 4, `digitos_pesos.png`).

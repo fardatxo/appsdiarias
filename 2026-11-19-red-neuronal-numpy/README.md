@@ -1,11 +1,23 @@
-# red-neuronal-numpy 🚧
+# red-neuronal-numpy ✅
 
 Redes neuronales **desde cero con numpy**: del perceptrón de una sola neurona a una red
 multicapa con backpropagation, sin PyTorch ni TensorFlow, para entender qué pasa por dentro.
 
-> Proyecto en curso (bloque de IA, 19-22 nov 2026). Ver [PLAN.md](PLAN.md).
+> Proyecto terminado (bloque de IA, 19-22 nov 2026, 4 días). Ver [PLAN.md](PLAN.md).
 
-## Estado actual (día 3/4)
+## Qué hace
+
+Una herramienta de terminal (`main.py`) con la que se entrena, evalúa, compara, guarda y
+usa una red neuronal implementada línea a línea con numpy:
+
+1. **Una sola neurona** (perceptrón, regresión logística) y por qué no basta.
+2. **Red multicapa (MLP)** con backpropagation escrito a mano y comprobado numéricamente.
+3. **Entrenar mejor**: optimizadores SGD/momentum/Adam, inicialización de pesos,
+   validación con parada temprana y softmax para 10 clases (dígitos 8×8, **97.11 %** en test).
+4. **Usar el modelo**: guardarlo en un `.npz`, cargarlo para predecir puntos nuevos o
+   dígitos dibujados en un fichero de texto, y compararlo con `MLPClassifier` de scikit-learn.
+
+## Conceptos, día a día
 
 ### Una sola neurona (día 1)
 
@@ -59,6 +71,21 @@ Un **MLP** apila capas: `entrada → Densa → activación → … → Densa →
   misma fórmula que sigmoide + entropía binaria.
 - **Dataset `digits`**: 1797 imágenes 8×8 de dígitos manuscritos (64 píxeles → 10 clases).
 
+### Usar el modelo (día 4)
+
+- **Guardar/cargar** (`red/persistencia.py`): un modelo entrenado es su "receta"
+  (arquitectura e hiperparámetros, guardados como JSON) + sus pesos `W`, `b` + **la
+  estandarización de train** (media y desviación). Todo va a un `.npz` comprimido
+  (~5 KB el de lunas, ~21 KB el de dígitos) y se carga con `allow_pickle=False`, así
+  que abrir un modelo no puede ejecutar código.
+- **Por qué guardar la estandarización**: la red aprendió con datos centrados en 0 y
+  con desviación 1. Si al predecir se le pasan los píxeles 0-16 tal cual, recibe números
+  en otra escala y responde cualquier cosa. El preprocesado es parte del modelo.
+- **Predecir con datos nuevos** (`predecir`): puntos 2D en coordenadas originales o
+  dígitos dibujados en texto (8 líneas × 8 caracteres, de claro a oscuro `" .:-=+*#%@"`).
+- **Comparación con scikit-learn** (`sklearn`): misma arquitectura y optimizador en
+  `MLPClassifier`; si el nuestro estuviera mal, se notaría aquí.
+
 Datasets 2D generados por código: `blobs` (separable con una recta), `lunas`,
 `circulos` y `xor` (no separables con una recta).
 
@@ -79,7 +106,17 @@ python main.py optimizadores --graficas                # SGD vs. momentum vs. Ad
 python main.py inicializacion --activacion relu        # pesos iniciales en una red profunda
 python main.py digitos --graficas                      # MLP softmax en dígitos 8×8
 python main.py entrenar --modelo mlp --dataset lunas --optimizador adam --validacion 0.2 --paciencia 20
-python -m pytest -q                                    # tests
+
+# Guardar un modelo y usarlo después
+python main.py entrenar --modelo mlp --dataset lunas --optimizador adam \
+       --validacion 0.2 --paciencia 20 --guardar modelos/lunas.npz
+python main.py predecir --modelo modelos/lunas.npz --punto 0,1 --punto 1,-0.5
+python main.py digitos --guardar modelos/digitos.npz
+python main.py predecir --modelo modelos/digitos.npz --indice 3        # imagen de test
+python main.py predecir --modelo modelos/digitos.npz --dibujo ejemplos/siete.txt
+
+python main.py sklearn                                 # nuestro MLP vs. MLPClassifier
+python -m pytest -q                                    # 102 tests
 ```
 
 `entrenar` muestra exactitud en train/test, precisión, recall, F1, la matriz de confusión
@@ -87,7 +124,9 @@ y la **frontera de decisión dibujada en ASCII**. Con `--graficas` guarda en `gr
 frontera y la curva de aprendizaje como PNG. Opciones del MLP: `--ocultas` (neuronas por
 capa, `0` = sin capas ocultas), `--activacion`, `--lote`, `--l2`, `--tasa`, `--epocas`,
 `--optimizador` (`sgd`, `momentum`, `adam`), `--init` (`lecun`, `xavier`, `he`, `pequena`),
-`--validacion` (fracción de train para validar) y `--paciencia` (parada temprana).
+`--validacion` (fracción de train para validar), `--paciencia` (parada temprana) y
+`--guardar` (fichero `.npz`). Los modelos guardados van a `modelos/`, que no se sube al
+repo (se regeneran en un par de segundos).
 
 ## Resultados reales
 
@@ -180,6 +219,69 @@ Los dígitos que más confunde son el 2 (93 %) y algunos 1 que toma por 8.
 
 Algunos fallos (real → predicho): ![](graficas/digitos_errores.png)
 
+### Predecir con el modelo guardado (día 4)
+
+`python main.py predecir --modelo modelos/lunas.npz --punto 0,1 --punto 1,-0.5 --punto 0.5,0.25 --punto 2,0.3`
+(MLP de lunas con Adam y parada temprana, 95 % en test):
+
+```
+  (+0.00, +1.00) -> clase 0  P(clase 1) = 0.001
+  (+1.00, -0.50) -> clase 1  P(clase 1) = 0.997 ████████████████████
+  (+0.50, +0.25) -> clase 0  P(clase 1) = 0.271 █████
+  (+2.00, +0.30) -> clase 1  P(clase 1) = 0.998 ████████████████████
+```
+
+El punto `(0.5, 0.25)` cae entre las dos lunas y el modelo lo nota: 27 % en vez de 0 % o 100 %.
+
+`python main.py predecir --modelo modelos/digitos.npz --dibujo ejemplos/siete.txt`:
+
+```
+  @@@@@
+     @@
+    @@
+  @@@@@
+   @@
+   @@
+  @@
+  @@
+
+Predicción: 7  (confianza 96.7 %)
+```
+
+Resultados con los dibujos de `ejemplos/`: `siete.txt` → 7 (96.7 %), `uno.txt` → 1
+(95.5 %), `cero.txt` → 0 (98.4 %)... y `siete_sin_barra.txt` → **3 (99.3 %)**. Ese 7
+dibujado sin la barra del medio y con un trazo muy grueso arriba no se parece a los 7 del
+dataset (casi todos llevan barra) y la red, además de fallar, lo hace **muy segura**.
+Es la lección más importante del día: un modelo solo sabe de los datos que ha visto, y
+su "confianza" no avisa cuando le llega algo distinto (*cambio de distribución*).
+
+### Comparación con scikit-learn (día 4)
+
+`python main.py sklearn` (Adam, tasa 0.01, lotes de 32, 200 épocas; en dígitos ambos
+con 20 % de validación y paciencia 15):
+
+| dataset  | arquitectura | numpy (este proyecto) | `MLPClassifier` |
+|----------|--------------|----------------------:|----------------:|
+| blobs    | 2-16-16-1    | 98.00 %  | 98.00 % |
+| lunas    | 2-16-16-1    | 95.00 %  | 94.00 % |
+| circulos | 2-16-16-1    | 99.00 %  | 99.00 % |
+| xor      | 2-16-16-1    | 100.00 % | 99.00 % |
+| digitos  | 64-32-10     | 97.11 %  | 97.78 % |
+
+Diferencias de ±1 punto (1 de 100 puntos de test, o 3 de 450 dígitos), que vienen de la
+inicialización aleatoria, el orden de los mini-lotes y que la parada temprana de
+scikit-learn vigila la exactitud y la nuestra la pérdida. En tiempo también van a la par
+(0.2-0.5 s por modelo): con redes tan pequeñas numpy basta y sobra.
+
+### Qué aprende cada neurona oculta (día 4)
+
+`python main.py digitos --graficas` guarda también los pesos de entrada de las 32
+neuronas ocultas, cada uno como una imagen 8×8 (rojo = ese píxel activa la neurona,
+azul = la apaga). No salen "plantillas" de dígitos limpias: cada neurona mira una mezcla
+de zonas y trazos, y es la **combinación** de todas en la capa de salida la que decide.
+
+![](graficas/digitos_pesos.png)
+
 ### Fronteras de decisión
 
 | Regresión logística (lunas) | MLP (lunas) | MLP (xor) |
@@ -201,14 +303,31 @@ Algunos fallos (real → predicho): ![](graficas/digitos_errores.png)
 
 ```
 main.py            CLI (datos, entrenar, comparar, capacidad, gradientes,
-                   optimizadores, inicializacion, digitos)
-red/datos.py       datasets 2D y digits, división estratificada, estandarización
+                   optimizadores, inicializacion, digitos, predecir, sklearn)
+red/datos.py       datasets 2D y digits, división estratificada, estandarización,
+                   dígitos dibujados en texto
+red/persistencia.py  guardar/cargar modelos en .npz (pesos + receta + estandarización)
 red/lineales.py    perceptrón, regresión logística, sigmoide estable
 red/mlp.py         capas Densa y Activacion, inicializaciones, MLP binario/softmax con
                    validación y parada temprana, comprobación de gradientes
 red/optimizadores.py  SGD, Momentum y Adam
 red/metricas.py    exactitud, matrices de confusión, precisión/recall/F1, log-loss
-red/visual.py      frontera de decisión (PNG y ASCII), curvas de aprendizaje, dígitos
-tests/             74 tests con pytest (incluye comprobación numérica del gradiente)
+red/visual.py      frontera de decisión (PNG y ASCII), curvas, dígitos, pesos
+tests/             102 tests con pytest (incluye comprobación numérica del gradiente)
+ejemplos/          dígitos dibujados en texto para probar `predecir --dibujo`
 graficas/          PNG generados
 ```
+
+## Qué se aprende
+
+1. **Por qué hacen falta capas ocultas**: una neurona solo traza rectas (≈50 % en XOR y
+   círculos); con una capa oculta no lineal la frontera se curva (≈99 %).
+2. **Backpropagation es la regla de la cadena**: cada capa recibe `dL/dsalida` y devuelve
+   `dL/dentrada`; y se puede (y se debe) comprobar con diferencias finitas.
+3. **Entrenar bien importa tanto como la arquitectura**: optimizador (Adam/momentum),
+   inicialización acorde a la activación (He para ReLU) y parada temprana con un
+   conjunto de validación para no sobreajustar.
+4. **Softmax + entropía cruzada** generalizan la regresión logística a k clases con el
+   mismo gradiente `(P − Y) / n`.
+5. **Un modelo es pesos + preprocesado**, y su confianza no garantiza nada fuera de la
+   distribución de entrenamiento (el 7 sin barra que la red ve como un 3 al 99 %).

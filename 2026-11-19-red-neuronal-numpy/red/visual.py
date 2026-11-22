@@ -101,3 +101,24 @@ def grafica_errores_digitos(imagenes, reales, predichos, ruta, maximo=10):
         ax.imshow(np.asarray(img).reshape(8, 8), cmap="gray_r")
         ax.set_title(f"{r}→{p}", fontsize=9, color="#b91c1c")
     return _guardar(fig, ruta)
+
+
+def grafica_pesos_digitos(W, ruta, columnas=8):
+    """Pesos de la primera capa de un MLP de dígitos: cada columna de W (64
+    valores) se pinta como una imagen 8×8. Rojo = peso positivo (ese píxel
+    "enciende" la neurona), azul = negativo (la apaga). Cada neurona oculta
+    aprende a fijarse en un trazo o zona concreta."""
+    n = W.shape[1]
+    filas = int(np.ceil(n / columnas))
+    fig, ejes = plt.subplots(filas, columnas, figsize=(columnas * 0.9, filas * 0.95),
+                             dpi=80)
+    ejes = np.atleast_1d(ejes).ravel()
+    for i, ax in enumerate(ejes):
+        ax.axis("off")
+        if i < n:
+            peso = W[:, i].reshape(8, 8)
+            limite = np.abs(peso).max() or 1.0
+            ax.imshow(peso, cmap="RdBu_r", vmin=-limite, vmax=limite)
+            ax.set_title(str(i), fontsize=7)
+    fig.suptitle("Pesos de entrada de cada neurona oculta", fontsize=10)
+    return _guardar(fig, ruta)
