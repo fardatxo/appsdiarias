@@ -1,0 +1,105 @@
+/* Estilos del tablero Kanban: CSS plano, sin frameworks */
+:root {
+    --fondo: #f3f4f8;
+    --panel: #ffffff;
+    --columna: #e8eaf1;
+    --texto: #1d2230;
+    --suave: #646b7d;
+    --acento: #3b5bdb;
+    --peligro: #c92a2a;
+    --borde: #d5d9e4;
+    --radio: 10px;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --fondo: #15171e;
+        --panel: #20232d;
+        --columna: #1a1d26;
+        --texto: #e6e8ef;
+        --suave: #9aa1b3;
+        --acento: #748ffc;
+        --peligro: #ff6b6b;
+        --borde: #333846;
+    }
+}
+
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+}
+a { color: var(--acento); }
+
+.cabecera {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--borde);
+}
+.logo { font-weight: 700; text-decoration: none; font-size: 1.1rem; }
+.contenedor { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+
+h1 { margin: 0 0 12px; }
+.desc { color: var(--suave); margin: 4px 0; }
+.vacio { color: var(--suave); }
+.aviso {
+    background: color-mix(in srgb, var(--acento) 15%, transparent);
+    border-left: 4px solid var(--acento); padding: 8px 12px; border-radius: 6px;
+}
+.error { color: var(--peligro); margin: 0; font-size: .9rem; }
+
+/* Formularios */
+.formulario { display: grid; gap: 8px; }
+.formulario label { display: grid; gap: 4px; font-size: .9rem; color: var(--suave); }
+input, textarea {
+    font: inherit; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--borde); background: var(--panel); color: var(--texto);
+}
+button {
+    font: inherit; padding: 8px 14px; border: 0; border-radius: 8px; cursor: pointer;
+    background: var(--acento); color: #fff; justify-self: start;
+}
+button.peligro { background: transparent; color: var(--peligro); border: 1px solid var(--peligro); }
+
+.tarjeta-form {
+    background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
+    padding: 16px; margin-bottom: 20px; max-width: 520px;
+}
+.tarjeta-form h2 { margin-top: 0; font-size: 1.1rem; }
+
+/* Portada: rejilla de tableros */
+.rejilla-tableros {
+    list-style: none; padding: 0; display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.tablero-mini a {
+    display: grid; gap: 4px; padding: 14px; min-height: 90px; text-decoration: none; color: inherit;
+    background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
+}
+.tablero-mini a:hover { border-color: var(--acento); }
+.meta { color: var(--suave); font-size: .85rem; }
+
+/* Vista de tablero */
+.titulo-tablero { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.columnas { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+.columna {
+    flex: 0 0 280px; background: var(--columna); border-radius: var(--radio); padding: 10px;
+}
+.columna h2 { font-size: 1rem; margin: 4px 4px 10px; display: flex; justify-content: space-between; }
+.contador { color: var(--suave); font-weight: 400; }
+.lista-tarjetas { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 8px; }
+.tarjeta {
+    background: var(--panel); border: 1px solid var(--borde); border-radius: 8px; padding: 10px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / .06);
+}
+.tarjeta p { margin: 6px 0 0; color: var(--suave); font-size: .9rem; }
+.nueva-tarjeta summary { cursor: pointer; color: var(--suave); padding: 4px; }
+.nueva-tarjeta form { margin-top: 8px; }
+
+.pagina-error { text-align: center; padding: 40px 0; }
+.pagina-error h1 { font-size: 3rem; }
+
+@media (max-width: 600px) {
+    .columnas { flex-direction: column; }
+    .columna { flex-basis: auto; width: 100%; }
+}
