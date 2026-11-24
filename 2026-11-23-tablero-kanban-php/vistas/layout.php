@@ -5,7 +5,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($titulo) ?> · Kanban PHP</title>
+    <meta name="csrf" content="<?= e(\Kanban\Csrf::token()) ?>">
     <link rel="stylesheet" href="/estilos.css">
+    <script src="/app.js" defer></script>
 </head>
 <body>
 <header class="cabecera">
@@ -14,7 +16,7 @@
 </header>
 <main class="contenedor">
     <?php if (!empty($aviso)): ?>
-        <p class="aviso" role="status"><?= e($aviso) ?></p>
+        <p class="aviso <?= ($aviso['tipo'] ?? 'ok') === 'error' ? 'aviso-error' : '' ?>" role="status"><?= e($aviso['texto'] ?? '') ?></p>
     <?php endif ?>
     <?= $contenido /* ya viene escapado desde la vista */ ?>
 </main>

@@ -27,10 +27,14 @@ Proyecto del bloque A (lunes a miércoles): 3 hitos, uno por día.
   (tableros → columnas → tarjetas con borrado en cascada), crear/listar/borrar tableros
   (con columnas iniciales), ver un tablero y añadir tarjetas, validación con errores por
   campo, avisos flash, CSRF, páginas de error 404/405/419, 11 tests y README inicial.
-- [ ] **Día 2 (mar 2026-11-24)** — Trabajar con las tarjetas: editar y borrar tarjetas,
+- [x] **Día 2 (mar 2026-11-24)** — Trabajar con las tarjetas: editar y borrar tarjetas,
   moverlas entre columnas y reordenarlas (botones ← → ↑ ↓ sin JS y arrastrar y soltar con
   JS progresivo), etiquetas de color y fecha límite (resaltando las vencidas), gestionar
   columnas (añadir, renombrar, borrar) y tests de todo ello.
+  *Hecho:* repositorio `Columnas` (añadir, renombrar, borrar sin dejar el tablero vacío,
+  reordenar ← →, máximo 10), `Tarjetas` con editar/borrar/mover en transacción manteniendo
+  posiciones 0..n-1, migración automática de bases del día 1, respuestas JSON para el
+  arrastre (`public/app.js`), avisos de error y 23 tests. Probado en Chromium con Playwright.
 - [ ] **Día 3 (mié 2026-11-25)** — Búsqueda y filtros (texto, etiqueta, vencidas),
   pequeña API JSON de solo lectura (`/api/tableros/{id}`) y exportación del tablero a
   JSON/CSV, estadísticas del tablero, pulido de la interfaz, más tests y README final.

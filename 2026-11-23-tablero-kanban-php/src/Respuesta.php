@@ -19,6 +19,16 @@ final class Respuesta
         return new self($estado, ['Content-Type' => 'text/html; charset=utf-8'], $html);
     }
 
+    /** Respuesta JSON (la usa el arrastrar y soltar). */
+    public static function json(array $datos, int $estado = 200): self
+    {
+        return new self(
+            $estado,
+            ['Content-Type' => 'application/json; charset=utf-8'],
+            json_encode($datos, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        );
+    }
+
     /** 303 See Other: tras un POST el navegador vuelve con GET (patrón PRG). */
     public static function redirigir(string $url): self
     {

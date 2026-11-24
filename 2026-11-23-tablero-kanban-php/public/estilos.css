@@ -96,6 +96,65 @@ button.peligro { background: transparent; color: var(--peligro); border: 1px sol
 .nueva-tarjeta summary { cursor: pointer; color: var(--suave); padding: 4px; }
 .nueva-tarjeta form { margin-top: 8px; }
 
+/* Día 2: avisos de error, acciones, etiquetas, fechas y arrastrar */
+.aviso-error {
+    background: color-mix(in srgb, var(--peligro) 15%, transparent);
+    border-left-color: var(--peligro);
+}
+.ayuda { color: var(--suave); font-size: .85rem; margin: 0 0 10px; }
+select {
+    font: inherit; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--borde); background: var(--panel); color: var(--texto);
+}
+button:disabled { opacity: .35; cursor: default; }
+button.secundario { background: var(--columna); color: var(--texto); border: 1px solid var(--borde); }
+.en-linea { display: flex; gap: 6px; flex-wrap: wrap; }
+.en-linea input { flex: 1; min-width: 0; }
+.botones { display: flex; gap: 12px; align-items: center; }
+.campos-extra { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.campos-extra label { display: grid; gap: 4px; font-size: .85rem; color: var(--suave); }
+
+.cabecera-columna { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+.cabecera-columna h2 { flex: 1; }
+.menu-columna summary { cursor: pointer; list-style: none; padding: 2px 8px; border-radius: 6px; color: var(--suave); }
+.menu-columna summary::-webkit-details-marker { display: none; }
+.menu-columna[open] summary { background: var(--panel); }
+.menu {
+    display: grid; gap: 8px; margin: 6px 0 10px; padding: 10px; width: 250px;
+    background: var(--panel); border: 1px solid var(--borde); border-radius: 8px;
+}
+.menu button { padding: 6px 10px; font-size: .85rem; }
+
+.lista-tarjetas { min-height: 24px; border-radius: 8px; transition: background .15s; }
+.lista-tarjetas.destino { background: color-mix(in srgb, var(--acento) 10%, transparent); }
+.tarjeta { cursor: grab; display: grid; gap: 4px; }
+.tarjeta.arrastrando { opacity: .4; }
+.tarjeta:target { outline: 2px solid var(--acento); }
+.tarjeta.fecha-vencida { border-left: 4px solid var(--peligro); }
+.tarjeta.fecha-hoy { border-left: 4px solid #f08c00; }
+.fecha { font-size: .8rem; color: var(--suave); }
+.fecha-vencida .fecha { color: var(--peligro); font-weight: 600; }
+.fecha-hoy .fecha { color: #f08c00; font-weight: 600; }
+
+.etiqueta {
+    justify-self: start; font-size: .72rem; font-weight: 600; color: #fff;
+    padding: 1px 8px; border-radius: 999px;
+}
+.etiqueta-rojo { background: #e03131; }
+.etiqueta-naranja { background: #f08c00; }
+.etiqueta-amarillo { background: #e8b500; color: #2b2300; }
+.etiqueta-verde { background: #2f9e44; }
+.etiqueta-azul { background: #1c7ed6; }
+.etiqueta-morado { background: #7048e8; }
+
+.acciones-tarjeta { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
+.acciones-tarjeta button {
+    padding: 2px 8px; font-size: .8rem; background: var(--columna); color: var(--texto);
+    border: 1px solid var(--borde);
+}
+.acciones-tarjeta .editar { margin-left: auto; font-size: .85rem; }
+.columna-nueva { background: transparent; border: 2px dashed var(--borde); }
+
 .pagina-error { text-align: center; padding: 40px 0; }
 .pagina-error h1 { font-size: 3rem; }
 

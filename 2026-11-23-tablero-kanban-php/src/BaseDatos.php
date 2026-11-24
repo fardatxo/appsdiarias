@@ -52,10 +52,27 @@ final class BaseDatos
                 titulo      TEXT    NOT NULL,
                 descripcion TEXT    NOT NULL DEFAULT '',
                 posicion    INTEGER NOT NULL,
-                creado_en   TEXT    NOT NULL
+                creado_en   TEXT    NOT NULL,
+                etiqueta    TEXT    NOT NULL DEFAULT '',
+                fecha_limite TEXT   NOT NULL DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_columnas_tablero ON columnas(tablero_id);
             CREATE INDEX IF NOT EXISTS idx_tarjetas_columna ON tarjetas(columna_id);
         SQL);
+        self::migrar($pdo);
+    }
+
+    /**
+     * Migración mínima: las bases creadas el día 1 no tienen las columnas
+     * etiqueta y fecha_limite, así que se añaden si faltan.
+     */
+    private static function migrar(PDO $pdo): void
+    {
+        $existentes = array_column($pdo->query('PRAGMA table_info(tarjetas)')->fetchAll(), 'name');
+        foreach (['etiqueta', 'fecha_limite'] as $campo) {
+            if (!in_array($campo, $existentes, true)) {
+                $pdo->exec("ALTER TABLE tarjetas ADD COLUMN $campo TEXT NOT NULL DEFAULT ''");
+            }
+        }
     }
 }
