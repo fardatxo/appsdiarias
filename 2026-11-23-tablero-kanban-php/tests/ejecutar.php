@@ -11,6 +11,9 @@ use Kanban\BaseDatos;
 use Kanban\Columnas;
 use Kanban\ErrorHttp;
 use Kanban\ErrorValidacion;
+use Kanban\Estadisticas;
+use Kanban\Exportador;
+use Kanban\Filtro;
 use Kanban\Router;
 use Kanban\Tableros;
 use Kanban\Tarjetas;
@@ -473,6 +476,212 @@ function test_app_columnas(): void
     igual(3, (new Columnas($pdo))->contar(1));
     igual(404, $app->manejar('POST', '/columnas/2/borrar', form([]))->estado);
     igual(404, $app->manejar('POST', '/tableros/9/columnas', form(['nombre' => 'x']))->estado);
+}
+
+
+// ---------- Día 3: filtros, estadísticas, exportación y API ----------
+
+/** Tarjeta mínima para probar clases puras sin BD */
+function tj(string $titulo, string $etiqueta = '', string $fecha = '', string $desc = ''): array
+{
+    return ['id' => 1, 'titulo' => $titulo, 'descripcion' => $desc, 'etiqueta' => $etiqueta,
+            'fecha_limite' => $fecha, 'creado_en' => '2026-11-25T10:00:00+01:00'];
+}
+
+function test_normalizar_y_url(): void
+{
+    igual('cafe con nino', normalizar('CAFÉ con Niño'));
+    igual('cancion', normalizar('CANCIÓN'));
+    igual('/t/1?q=a+b&estado=hoy', url('/t/1', ['q' => 'a b', 'estado' => 'hoy']));
+    igual('/t/1', url('/t/1'));
+}
+
+function test_filtro_desde_consulta_ignora_valores_raros(): void
+{
+    $f = Filtro::desdeConsulta(['q' => '  hola ', 'etiqueta' => 'fucsia', 'estado' => 'DROP TABLE']);
+    igual('hola', $f->texto);
+    igual('', $f->etiqueta);
+    igual('', $f->estado);
+    comprobar($f->activo());
+    comprobar(!Filtro::desdeConsulta([])->activo());
+    // Un array en vez de texto (?q[]=x) no debe romper nada
+    igual('', Filtro::desdeConsulta(['q' => ['x'], 'estado' => ['hoy']])->texto);
+    igual(100, mb_strlen(Filtro::desdeConsulta(['q' => str_repeat('á', 300)])->texto));
+    igual(['q' => 'hola'], $f->aConsulta());
+}
+
+function test_filtro_texto_etiqueta_y_fechas(): void
+{
+    $hoy = '2026-11-25';
+    $busca = fn (array $c, array $t) => Filtro::desdeConsulta($c)->coincide($t, $hoy);
+    $cafe = tj('Comprar café', 'rojo', '2026-11-20', 'Para la oficina');
+
+    comprobar($busca(['q' => 'CAFE'], $cafe), 'sin tildes ni mayúsculas');
+    comprobar($busca(['q' => 'oficina comprar'], $cafe), 'palabras en cualquier orden, también en la descripción');
+    comprobar(!$busca(['q' => 'café té'], $cafe), 'todas las palabras deben estar');
+    comprobar($busca(['etiqueta' => 'rojo'], $cafe));
+    comprobar(!$busca(['etiqueta' => 'azul'], $cafe));
+    comprobar($busca(['estado' => 'vencidas'], $cafe));
+    comprobar(!$busca(['estado' => 'hoy'], $cafe));
+    comprobar($busca(['estado' => 'hoy'], tj('x', '', $hoy)));
+    comprobar($busca(['estado' => 'sin_fecha'], tj('x')));
+    comprobar(!$busca(['estado' => 'con_fecha'], tj('x')));
+    comprobar(!$busca(['q' => 'café', 'etiqueta' => 'azul'], $cafe), 'condiciones combinadas con Y');
+
+    $cols = [['nombre' => 'A', 'tarjetas' => [$cafe, tj('Otra')]], ['nombre' => 'B', 'tarjetas' => [tj('Café 2')]]];
+    $res = Filtro::desdeConsulta(['q' => 'cafe'])->aplicar($cols, $hoy);
+    igual([['Comprar café'], ['Café 2']], array_map(fn ($c) => array_column($c['tarjetas'], 'titulo'), $res));
+    igual($cols, Filtro::desdeConsulta([])->aplicar($cols), 'sin filtro no cambia nada');
+}
+
+function test_estadisticas(): void
+{
+    $hoy = '2026-11-25';
+    $cols = [
+        ['nombre' => 'Por hacer', 'tarjetas' => [tj('a', 'rojo', '2026-11-01'), tj('b', '', $hoy), tj('c', 'rojo', '2026-12-24')]],
+        ['nombre' => 'En curso', 'tarjetas' => [tj('d', 'azul', '2026-12-01')]],
+        ['nombre' => 'Hecho', 'tarjetas' => [tj('e', '', '2026-01-01'), tj('f'), tj('g'), tj('h')]],
+    ];
+    $e = Estadisticas::calcular($cols, $hoy);
+    igual(8, $e['total']);
+    igual(4, $e['hechas']);
+    igual(50, $e['progreso']);
+    igual([3, 1, 4], array_column($e['por_columna'], 'tarjetas'));
+    igual(2, $e['por_etiqueta']['rojo']);
+    igual(5, $e['por_etiqueta']['']);
+    igual(5, $e['con_fecha']);
+    igual(1, $e['vencidas'], 'la vencida de "Hecho" no cuenta:');
+    igual(1, $e['vencen_hoy']);
+    igual(['d', 'c'], array_column($e['proximas'], 'titulo'), 'próximas ordenadas por fecha:');
+
+    $vacio = Estadisticas::calcular([]);
+    igual(0, $vacio['total']);
+    igual(0, $vacio['progreso'], 'sin división entre cero');
+}
+
+function test_exportar_csv_escapa_y_evita_formulas(): void
+{
+    $cols = [['nombre' => 'Por hacer', 'tarjetas' => [
+        tj('Hola, "mundo"', 'verde', '', "dos\nlíneas"),
+        tj('=HYPERLINK("http://malo")'),
+    ]]];
+    $csv = Exportador::csv($cols);
+    comprobar(str_starts_with($csv, "\xEF\xBB\xBF"), 'BOM para Excel');
+    $f = fopen('php://temp', 'r+');
+    fwrite($f, substr($csv, 3));
+    rewind($f);
+    $filas = [];
+    while (($fila = fgetcsv($f, null, ',', '"', '')) !== false) {
+        $filas[] = $fila;
+    }
+    igual(Exportador::CABECERA_CSV, $filas[0]);
+    igual(3, count($filas), 'cabecera + 2 tarjetas (el salto de línea va dentro de comillas)');
+    igual('Hola, "mundo"', $filas[1][2]);
+    igual("dos\nlíneas", $filas[1][3]);
+    igual('1', $filas[1][1], 'posición empezando en 1');
+    igual("'=HYPERLINK(\"http://malo\")", $filas[2][2], 'fórmula neutralizada');
+    igual('texto', Exportador::celdaSegura('texto'));
+    igual("'@SUM(A1)", Exportador::celdaSegura('@SUM(A1)'));
+    igual('mi-tablero-ano-2026.csv', Exportador::nombreFichero('¡Mi tablero (año 2026)!', 'csv'));
+    igual('tablero.json', Exportador::nombreFichero('###', 'json'));
+}
+
+/** Tablero con tarjetas variadas creado a través de la app */
+function app_con_datos(): array
+{
+    $pdo = bd();
+    $app = app($pdo);
+    $app->manejar('POST', '/tableros', form(['nombre' => 'Viaje']));
+    $app->manejar('POST', '/columnas/1/tarjetas', form(['titulo' => 'Reservar hotel', 'etiqueta' => 'rojo', 'fecha_limite' => '2020-01-01']));
+    $app->manejar('POST', '/columnas/1/tarjetas', form(['titulo' => 'Comprar maleta', 'descripcion' => 'Una pequeña']));
+    $app->manejar('POST', '/columnas/3/tarjetas', form(['titulo' => 'Pedir vacaciones', 'etiqueta' => 'verde']));
+    $app->manejar('GET', '/tableros/1'); // consume el aviso
+    return [$pdo, $app];
+}
+
+function test_app_tablero_con_filtros(): void
+{
+    [, $app] = app_con_datos();
+    $html = $app->manejar('GET', '/tableros/1')->cuerpo;
+    comprobar(str_contains($html, 'draggable="true"'), 'sin filtros se puede arrastrar');
+
+    $r = $app->manejar('GET', '/tableros/1?q=MALETA');
+    igual(200, $r->estado);
+    comprobar(str_contains($r->cuerpo, 'Comprar maleta'));
+    comprobar(!str_contains($r->cuerpo, 'Reservar hotel'));
+    comprobar(str_contains($r->cuerpo, 'Mostrando <strong>1</strong> de 3 tarjetas'));
+    comprobar(!str_contains($r->cuerpo, 'draggable="true"'), 'con filtros no se arrastra');
+    comprobar(str_contains($r->cuerpo, 'value="MALETA"'), 'el buscador conserva el texto');
+    comprobar(str_contains($r->cuerpo, '/exportar/csv?q=MALETA'), 'exportar respeta el filtro');
+
+    $html = $app->manejar('GET', '/tableros/1?estado=vencidas')->cuerpo;
+    comprobar(str_contains($html, 'Reservar hotel') && !str_contains($html, 'Comprar maleta'));
+    $html = $app->manejar('GET', '/tableros/1?etiqueta=verde')->cuerpo;
+    comprobar(str_contains($html, 'Pedir vacaciones') && !str_contains($html, 'Reservar hotel'));
+
+    // El texto buscado se escapa al pintarlo
+    $html = $app->manejar('GET', '/tableros/1?q=' . urlencode('"><script>'))->cuerpo;
+    comprobar(!str_contains($html, '"><script>') && str_contains($html, '&quot;&gt;&lt;script&gt;'));
+}
+
+function test_app_api_json(): void
+{
+    [, $app] = app_con_datos();
+    $r = $app->manejar('GET', '/api/tableros');
+    igual(200, $r->estado);
+    igual('application/json; charset=utf-8', $r->cabeceras['Content-Type']);
+    $lista = json_decode($r->cuerpo, true)['tableros'];
+    igual([['id' => 1, 'nombre' => 'Viaje', 'descripcion' => '', 'num_tarjetas' => 3, 'url' => '/api/tableros/1']], $lista);
+
+    $d = json_decode($app->manejar('GET', '/api/tableros/1')->cuerpo, true);
+    igual('Viaje', $d['nombre']);
+    igual(['Por hacer', 'En curso', 'Hecho'], array_column($d['columnas'], 'nombre'));
+    igual(null, $d['columnas'][0]['tarjetas'][1]['etiqueta'], 'campos vacíos como null');
+    igual('rojo', $d['columnas'][0]['tarjetas'][0]['etiqueta']);
+    igual(3, $d['estadisticas']['total']);
+    igual(33, $d['estadisticas']['progreso']);
+    igual([], $d['filtro']);
+
+    $d = json_decode($app->manejar('GET', '/api/tableros/1?etiqueta=rojo')->cuerpo, true);
+    igual(['etiqueta' => 'rojo'], $d['filtro']);
+    igual([1, 0, 0], array_map(fn ($c) => count($c['tarjetas']), $d['columnas']));
+    igual(3, $d['estadisticas']['total'], 'las estadísticas son de todo el tablero');
+
+    // Errores de la API también en JSON
+    $r = $app->manejar('GET', '/api/tableros/99');
+    igual(404, $r->estado);
+    igual(['ok' => false, 'error' => 'Ese tablero no existe'], json_decode($r->cuerpo, true));
+    igual(405, $app->manejar('POST', '/api/tableros', form([]))->estado);
+    $r = $app->manejar('GET', '/api/nada');
+    igual(404, $r->estado);
+    igual(false, json_decode($r->cuerpo, true)['ok']);
+}
+
+function test_app_exportar_y_estadisticas(): void
+{
+    [, $app] = app_con_datos();
+    $r = $app->manejar('GET', '/tableros/1/exportar/csv');
+    igual(200, $r->estado);
+    igual('attachment; filename="viaje.csv"', $r->cabeceras['Content-Disposition']);
+    igual(4, substr_count(trim($r->cuerpo), "\n") + 1, 'cabecera + 3 tarjetas');
+
+    $r = $app->manejar('GET', '/tableros/1/exportar/csv?q=maleta');
+    igual(2, substr_count(trim($r->cuerpo), "\n") + 1, 'solo la tarjeta filtrada');
+
+    $r = $app->manejar('GET', '/tableros/1/exportar/json');
+    igual('attachment; filename="viaje.json"', $r->cabeceras['Content-Disposition']);
+    igual('Pedir vacaciones', json_decode($r->cuerpo, true)['columnas'][2]['tarjetas'][0]['titulo']);
+
+    $html = $app->manejar('GET', '/tableros/1/estadisticas')->cuerpo;
+    comprobar(str_contains($html, 'Estadísticas de «Viaje»'));
+    comprobar(str_contains($html, '33 %'));
+    comprobar(str_contains($html, '?estado=vencidas'), 'enlace a las vencidas');
+    igual(404, $app->manejar('GET', '/tableros/9/estadisticas')->estado);
+    igual(404, $app->manejar('GET', '/tableros/9/exportar/csv')->estado);
+
+    // Tablero vacío
+    $app->manejar('POST', '/tableros', form(['nombre' => 'Vacío']));
+    comprobar(str_contains($app->manejar('GET', '/tableros/2/estadisticas')->cuerpo, 'todavía no tiene tarjetas'));
 }
 
 // ---------- Ejecución ----------

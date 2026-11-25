@@ -4,6 +4,10 @@ $erroresPorColumna = $erroresPorColumna ?? [];
 $viejoPorColumna = $viejoPorColumna ?? [];
 $numColumnas = count($columnas);
 $hoy = date('Y-m-d');
+$filtro ??= \Kanban\Filtro::desdeConsulta([]);
+$filtrando = $filtro->activo();
+$visibles = array_sum(array_map(fn ($c) => count($c['tarjetas']), $columnas));
+$tid = (int) $tablero['id'];
 ?>
 <div class="titulo-tablero">
     <div>
@@ -17,7 +21,38 @@ $hoy = date('Y-m-d');
     </form>
 </div>
 
-<p class="ayuda">Arrastra las tarjetas para moverlas o usa los botones ← ↑ ↓ →.</p>
+<nav class="barra-tablero">
+    <a href="/tableros/<?= $tid ?>/estadisticas" class="boton-enlace">📊 Estadísticas</a>
+    <a href="<?= e(url("/tableros/$tid/exportar/csv", $filtro->aConsulta())) ?>" class="boton-enlace">⬇ CSV</a>
+    <a href="<?= e(url("/tableros/$tid/exportar/json", $filtro->aConsulta())) ?>" class="boton-enlace">⬇ JSON</a>
+    <a href="<?= e(url("/api/tableros/$tid", $filtro->aConsulta())) ?>" class="boton-enlace" title="API de solo lectura">{ } API</a>
+</nav>
+
+<form method="get" action="/tableros/<?= $tid ?>" class="filtros" role="search">
+    <input type="search" name="q" value="<?= e($filtro->texto) ?>" placeholder="Buscar en títulos y descripciones"
+           maxlength="<?= \Kanban\Filtro::MAX_TEXTO ?>" aria-label="Buscar">
+    <select name="etiqueta" aria-label="Etiqueta">
+        <option value="">Todas las etiquetas</option>
+        <?php foreach (\Kanban\Tarjetas::ETIQUETAS as $clave => $nombre): ?>
+            <option value="<?= e($clave) ?>" <?= $filtro->etiqueta === $clave ? 'selected' : '' ?>><?= e($nombre) ?></option>
+        <?php endforeach ?>
+    </select>
+    <select name="estado" aria-label="Fecha límite">
+        <option value="">Cualquier fecha</option>
+        <?php foreach (\Kanban\Filtro::ESTADOS as $clave => $nombre): ?>
+            <option value="<?= e($clave) ?>" <?= $filtro->estado === $clave ? 'selected' : '' ?>><?= e($nombre) ?></option>
+        <?php endforeach ?>
+    </select>
+    <button type="submit">Filtrar</button>
+    <?php if ($filtrando): ?><a href="/tableros/<?= $tid ?>" class="quitar-filtros">Quitar filtros</a><?php endif ?>
+</form>
+
+<?php if ($filtrando): ?>
+    <p class="ayuda resultado-filtro">Mostrando <strong><?= $visibles ?></strong> de <?= plural((int) ($totalTarjetas ?? $visibles), 'tarjeta', 'tarjetas') ?>.
+        Quita los filtros para mover tarjetas.</p>
+<?php else: ?>
+    <p class="ayuda">Arrastra las tarjetas para moverlas o usa los botones ← ↑ ↓ →.</p>
+<?php endif ?>
 
 <div class="columnas">
     <?php foreach ($columnas as $i => $col): ?>
@@ -45,7 +80,7 @@ $hoy = date('Y-m-d');
                             <button name="direccion" value="derecha" class="secundario" <?= $i === $numColumnas - 1 ? 'disabled' : '' ?>>Mover →</button>
                         </form>
                         <form method="post" action="/columnas/<?= $colId ?>/borrar"
-                              onsubmit="return confirm('¿Borrar la columna y sus <?= $numTarjetas ?> tarjetas?')">
+                              onsubmit="return confirm('¿Borrar la columna y <?= $filtrando ? 'todas sus' : 'sus ' . $numTarjetas ?> tarjetas?')">
                             <?= \Kanban\Csrf::campo() ?>
                             <button type="submit" class="peligro" <?= $numColumnas <= 1 ? 'disabled' : '' ?>>Borrar columna</button>
                         </form>
@@ -61,7 +96,7 @@ $hoy = date('Y-m-d');
                     $etiqueta = $tarjeta['etiqueta'];
                     ?>
                     <li class="tarjeta <?= $estadoFecha ? 'fecha-' . $estadoFecha : '' ?>" id="tarjeta-<?= $id ?>"
-                        draggable="true" data-id="<?= $id ?>">
+                        <?= $filtrando ? '' : 'draggable="true"' ?> data-id="<?= $id ?>">
                         <?php if ($etiqueta !== '' && isset(\Kanban\Tarjetas::ETIQUETAS[$etiqueta])): ?>
                             <span class="etiqueta etiqueta-<?= e($etiqueta) ?>"><?= e(\Kanban\Tarjetas::ETIQUETAS[$etiqueta]) ?></span>
                         <?php endif ?>
@@ -77,14 +112,17 @@ $hoy = date('Y-m-d');
                         <?php endif ?>
                         <form method="post" action="/tarjetas/<?= $id ?>/mover" class="acciones-tarjeta">
                             <?= \Kanban\Csrf::campo() ?>
+                            <?php if (!$filtrando): ?>
                             <button name="direccion" value="izquierda" title="A la columna anterior" <?= $i === 0 ? 'disabled' : '' ?>>←</button>
                             <button name="direccion" value="arriba" title="Subir" <?= $j === 0 ? 'disabled' : '' ?>>↑</button>
                             <button name="direccion" value="abajo" title="Bajar" <?= $j === $numTarjetas - 1 ? 'disabled' : '' ?>>↓</button>
                             <button name="direccion" value="derecha" title="A la columna siguiente" <?= $i === $numColumnas - 1 ? 'disabled' : '' ?>>→</button>
+                            <?php endif ?>
                             <a href="/tarjetas/<?= $id ?>/editar" class="editar">Editar</a>
                         </form>
                     </li>
                 <?php endforeach ?>
+                <?php if ($filtrando && $numTarjetas === 0): ?><li class="sin-resultados">Sin coincidencias</li><?php endif ?>
             </ul>
 
             <details class="nueva-tarjeta" <?= $err ? 'open' : '' ?>>

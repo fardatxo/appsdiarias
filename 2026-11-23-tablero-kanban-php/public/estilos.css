@@ -155,6 +155,40 @@ button.secundario { background: var(--columna); color: var(--texto); border: 1px
 .acciones-tarjeta .editar { margin-left: auto; font-size: .85rem; }
 .columna-nueva { background: transparent; border: 2px dashed var(--borde); }
 
+/* Barra de acciones y filtros del tablero */
+.barra-tablero { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.boton-enlace {
+    padding: 6px 12px; border-radius: 8px; text-decoration: none; font-size: .9rem;
+    background: var(--panel); border: 1px solid var(--borde); color: var(--texto);
+}
+.boton-enlace:hover { border-color: var(--acento); }
+.filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
+.filtros input[type=search] { flex: 1 1 220px; min-width: 0; }
+.quitar-filtros { font-size: .9rem; }
+.resultado-filtro { background: color-mix(in srgb, var(--acento) 10%, transparent); padding: 6px 10px; border-radius: 6px; }
+.sin-resultados { color: var(--suave); font-size: .85rem; list-style: none; padding: 4px; }
+.tarjeta:not([draggable]) { cursor: default; }
+
+/* Página de estadísticas */
+.cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 12px 0; }
+.cifra {
+    background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
+    padding: 12px; color: var(--suave); font-size: .85rem;
+}
+.cifra span { display: block; font-size: 1.8rem; font-weight: 700; color: var(--texto); }
+.cifra-mal span { color: var(--peligro); }
+.progreso { height: 12px; background: var(--columna); border-radius: 999px; overflow: hidden; margin-bottom: 16px; }
+.progreso div { height: 100%; background: #2f9e44; }
+.paneles { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.paneles h2 { margin-top: 0; font-size: 1.05rem; }
+.barra-fila { display: grid; grid-template-columns: 110px 1fr 32px; gap: 8px; align-items: center; margin: 6px 0; font-size: .9rem; }
+.barra-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra { height: 10px; background: var(--columna); border-radius: 999px; overflow: hidden; }
+:where(.barra) span { display: block; height: 100%; background: var(--acento); }
+.barra-num { text-align: right; font-variant-numeric: tabular-nums; }
+.proximas { padding-left: 18px; margin: 0 0 8px; }
+.proximas li { margin: 4px 0; }
+
 .pagina-error { text-align: center; padding: 40px 0; }
 .pagina-error h1 { font-size: 3rem; }
 

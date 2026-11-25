@@ -45,3 +45,15 @@ function estado_fecha(string $fecha, ?string $hoy = null): string
         default => '',
     };
 }
+
+/** Minúsculas, sin tildes y ñ → n, para buscar "cafe" y encontrar "Café". */
+function normalizar(string $texto): string
+{
+    return strtr(mb_strtolower($texto), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'à' => 'a', 'è' => 'e', 'ò' => 'o', 'ñ' => 'n']);
+}
+
+/** URL con query string: url('/tableros/1', ['q' => 'x']) → "/tableros/1?q=x" */
+function url(string $ruta, array $consulta = []): string
+{
+    return $consulta ? $ruta . '?' . http_build_query($consulta) : $ruta;
+}

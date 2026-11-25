@@ -21,6 +21,12 @@ final class App
     /** Datos del formulario de la petición actual */
     private array $post = [];
 
+    /** Parámetros de la query string (?q=...) de la petición actual */
+    private array $consulta = [];
+
+    /** ¿La petición va a la API JSON? (los errores también se devuelven en JSON) */
+    private bool $esApi = false;
+
     public function __construct(PDO $pdo, string $carpetaVistas)
     {
         $this->tableros = new Tableros($pdo);
@@ -35,6 +41,9 @@ final class App
     public function manejar(string $metodo, string $uri, array $post = []): Respuesta
     {
         $this->post = $post;
+        // La query string se lee de la propia URI: así los tests no necesitan $_GET
+        parse_str((string) parse_url($uri, PHP_URL_QUERY), $this->consulta);
+        $this->esApi = str_starts_with((string) parse_url($uri, PHP_URL_PATH), '/api/');
         try {
             if ($metodo === 'POST') {
                 Csrf::comprobar($post['_token'] ?? null);
@@ -42,7 +51,7 @@ final class App
             $r = $this->router->despachar($metodo, $uri);
             return $r instanceof Respuesta ? $r : Respuesta::html((string) $r);
         } catch (ErrorHttp $e) {
-            if ($this->esAjax()) {
+            if ($this->esAjax() || $this->esApi) {
                 return Respuesta::json(['ok' => false, 'error' => $e->getMessage()], $e->estado);
             }
             $html = $this->vista->render('error', ['estado' => $e->estado, 'mensaje' => $e->getMessage()], 'Error');
@@ -86,6 +95,59 @@ final class App
             }
             $this->ponerAviso('Tablero borrado.');
             return Respuesta::redirigir('/');
+        });
+
+        // Estadísticas del tablero
+        $r->get('/tableros/{id}/estadisticas', function (int $id) {
+            $tablero = $this->tableroOError($id);
+            $html = $this->vista->render('estadisticas', [
+                'tablero' => $tablero,
+                'est' => Estadisticas::calcular($this->tableros->columnasConTarjetas($id)),
+            ], 'Estadísticas · ' . $tablero['nombre']);
+            return Respuesta::html($html);
+        });
+
+        // Exportar (respeta los filtros activos, así se puede exportar "solo las vencidas")
+        $r->get('/tableros/{id}/exportar/json', function (int $id) {
+            $tablero = $this->tableroOError($id);
+            $columnas = $this->filtro()->aplicar($this->tableros->columnasConTarjetas($id));
+            return Respuesta::descarga(
+                Exportador::json($tablero, $columnas),
+                'application/json; charset=utf-8',
+                Exportador::nombreFichero($tablero['nombre'], 'json'),
+            );
+        });
+
+        $r->get('/tableros/{id}/exportar/csv', function (int $id) {
+            $tablero = $this->tableroOError($id);
+            $columnas = $this->filtro()->aplicar($this->tableros->columnasConTarjetas($id));
+            return Respuesta::descarga(
+                Exportador::csv($columnas),
+                'text/csv; charset=utf-8',
+                Exportador::nombreFichero($tablero['nombre'], 'csv'),
+            );
+        });
+
+        // ---------- API JSON de solo lectura ----------
+
+        $r->get('/api/tableros', fn () => Respuesta::json([
+            'tableros' => array_map(fn (array $t) => [
+                'id' => (int) $t['id'],
+                'nombre' => $t['nombre'],
+                'descripcion' => $t['descripcion'],
+                'num_tarjetas' => (int) $t['num_tarjetas'],
+                'url' => '/api/tableros/' . $t['id'],
+            ], $this->tableros->listar()),
+        ]));
+
+        $r->get('/api/tableros/{id}', function (int $id) {
+            $tablero = $this->tableroOError($id);
+            $todas = $this->tableros->columnasConTarjetas($id);
+            $filtro = $this->filtro();
+            $datos = Exportador::aArray($tablero, $filtro->aplicar($todas));
+            $datos['filtro'] = (object) $filtro->aConsulta();
+            $datos['estadisticas'] = Estadisticas::calcular($todas);
+            return Respuesta::json($datos);
         });
 
         // ---------- Columnas ----------
@@ -206,6 +268,16 @@ final class App
         return Respuesta::redirigir("/tableros/$tableroId");
     }
 
+    private function tableroOError(int $id): array
+    {
+        return $this->tableros->buscar($id) ?? throw new ErrorHttp(404, 'Ese tablero no existe');
+    }
+
+    private function filtro(): Filtro
+    {
+        return Filtro::desdeConsulta($this->consulta);
+    }
+
     private function columnaOError(int $id): array
     {
         return $this->columnas->buscar($id) ?? throw new ErrorHttp(404, 'Esa columna no existe');
@@ -223,10 +295,14 @@ final class App
 
     private function pintarTablero(int $id, array $erroresPorColumna = [], int $estado = 200, array $viejoPorColumna = []): Respuesta
     {
-        $tablero = $this->tableros->buscar($id) ?? throw new ErrorHttp(404, 'Ese tablero no existe');
+        $tablero = $this->tableroOError($id);
+        $todas = $this->tableros->columnasConTarjetas($id);
+        $filtro = $this->filtro();
         $html = $this->vista->render('tablero', [
             'tablero' => $tablero,
-            'columnas' => $this->tableros->columnasConTarjetas($id),
+            'columnas' => $filtro->aplicar($todas),
+            'filtro' => $filtro,
+            'totalTarjetas' => array_sum(array_map(fn ($c) => count($c['tarjetas']), $todas)),
             'erroresPorColumna' => $erroresPorColumna,
             'viejoPorColumna' => $viejoPorColumna,
             'aviso' => $this->sacarAviso(),

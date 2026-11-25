@@ -35,6 +35,12 @@ Proyecto del bloque A (lunes a miércoles): 3 hitos, uno por día.
   reordenar ← →, máximo 10), `Tarjetas` con editar/borrar/mover en transacción manteniendo
   posiciones 0..n-1, migración automática de bases del día 1, respuestas JSON para el
   arrastre (`public/app.js`), avisos de error y 23 tests. Probado en Chromium con Playwright.
-- [ ] **Día 3 (mié 2026-11-25)** — Búsqueda y filtros (texto, etiqueta, vencidas),
+- [x] **Día 3 (mié 2026-11-25)** — Búsqueda y filtros (texto, etiqueta, vencidas),
   pequeña API JSON de solo lectura (`/api/tableros/{id}`) y exportación del tablero a
   JSON/CSV, estadísticas del tablero, pulido de la interfaz, más tests y README final.
+  *Hecho:* `Filtro` (texto sin tildes ni mayúsculas, todas las palabras, etiqueta y estado
+  de fecha; el arrastre se desactiva mientras se filtra), `Estadisticas` (progreso, por
+  columna y etiqueta, vencidas y próximas fechas) con su página de barras en CSS,
+  `Exportador` a JSON y CSV (BOM para Excel, protección contra inyección de fórmulas,
+  respeta los filtros), API `GET /api/tableros` y `/api/tableros/{id}` con errores en JSON,
+  31 tests y README final. Probado en Chromium con Playwright.

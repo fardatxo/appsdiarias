@@ -29,6 +29,15 @@ final class Respuesta
         );
     }
 
+    /** Fichero para descargar (exportar a JSON o CSV). */
+    public static function descarga(string $contenido, string $tipo, string $nombreFichero): self
+    {
+        return new self(200, [
+            'Content-Type' => $tipo,
+            'Content-Disposition' => 'attachment; filename="' . $nombreFichero . '"',
+        ], $contenido);
+    }
+
     /** 303 See Other: tras un POST el navegador vuelve con GET (patrón PRG). */
     public static function redirigir(string $url): self
     {
