@@ -1,0 +1,46 @@
+# PLAN — detector-spam
+
+## Descripción
+
+Proyecto de inteligencia artificial: **procesamiento de lenguaje natural (PLN) clásico
+desde cero** aplicado a detectar SMS de spam en español. Se construye todo el pipeline
+a mano con numpy — preprocesado de texto, bolsa de palabras, TF-IDF, Naive Bayes y
+regresión logística — y se compara con scikit-learn para comprobar que las cuentas
+están bien. Al final, el mismo pipeline se reutiliza para análisis de sentimiento.
+
+Datos: un corpus de SMS sintéticos en español generado por código con semilla fija
+(plantillas + huecos + erratas + un 3 % de etiquetas mal puestas a propósito), así no
+hay que descargar nada y los resultados son reproducibles.
+
+Bloque B (jueves-domingo): 4 días, 4 hitos.
+
+## Tecnologías
+
+- Python 3
+- numpy (vectorizadores, modelos y métricas a mano)
+- scikit-learn (solo para comparar resultados)
+- matplotlib (gráficas en PNG)
+- pytest (tests)
+
+## Hitos
+
+- [x] **Día 1 (jue 2026-11-26)** — Estructura base y primer clasificador: generador del
+  dataset (1200 SMS, `datos/mensajes.csv`), normalización y tokenización (tildes, URLs,
+  teléfonos, cantidades de dinero y números como tokens especiales, palabras vacías),
+  bolsa de palabras, **Naive Bayes multinomial** con suavizado de Laplace, división
+  train/test estratificada, métricas (exactitud, precisión, recall, F1, matriz de
+  confusión), CLI `generar` / `datos` / `evaluar` / `predecir`, gráfica de palabras más
+  indicativas, 17 tests (incluida la comparación con `MultinomialNB` de scikit-learn)
+  y README inicial.
+- [ ] **Día 2 (vie 2026-11-27)** — Mejores características: **TF-IDF** a mano, n-gramas
+  (bigramas) y n-gramas de caracteres (robustos a erratas); **regresión logística** con
+  descenso de gradiente y L2 en numpy; comando `comparar` con una tabla de modelos ×
+  representaciones y verificación contra `TfidfVectorizer` / `LogisticRegression`.
+- [ ] **Día 3 (sáb 2026-11-28)** — Evaluar en serio y explicar: validación cruzada k-fold,
+  búsqueda del mejor `alfa`/`C`, curvas precisión-recall y ROC (AUC) a mano con PNG,
+  ajuste del umbral (priorizar no mandar mensajes buenos a spam) y comando `explicar`
+  que desglosa la contribución de cada palabra a una predicción.
+- [ ] **Día 4 (dom 2026-11-29)** — Reutilizar y pulir: guardar/cargar el modelo en JSON,
+  segundo caso de uso (análisis de sentimiento de reseñas generadas), demo web mínima
+  con `http.server` para probar mensajes, más tests y README final con métricas reales
+  y "qué se aprende".
