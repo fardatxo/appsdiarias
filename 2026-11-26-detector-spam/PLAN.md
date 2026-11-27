@@ -32,10 +32,14 @@ Bloque B (jueves-domingo): 4 días, 4 hitos.
   confusión), CLI `generar` / `datos` / `evaluar` / `predecir`, gráfica de palabras más
   indicativas, 17 tests (incluida la comparación con `MultinomialNB` de scikit-learn)
   y README inicial.
-- [ ] **Día 2 (vie 2026-11-27)** — Mejores características: **TF-IDF** a mano, n-gramas
-  (bigramas) y n-gramas de caracteres (robustos a erratas); **regresión logística** con
-  descenso de gradiente y L2 en numpy; comando `comparar` con una tabla de modelos ×
-  representaciones y verificación contra `TfidfVectorizer` / `LogisticRegression`.
+- [x] **Día 2 (vie 2026-11-27)** — Mejores características: **TF-IDF** a mano (tf
+  sublineal, idf suavizado, norma L2), n-gramas (bigramas) y n-gramas de caracteres
+  (robustos a erratas); **regresión logística** con descenso de gradiente, momento de
+  Nesterov, paso automático 1/L y L2 en numpy; comando `comparar` con una tabla de 4
+  representaciones × 2 modelos, prueba de robustez con erratas extra y verificación
+  contra `TfidfVectorizer` / `LogisticRegression` (`--sklearn`); `evaluar` y `predecir`
+  aceptan `--modelo` / `--repr`; gráficas de curva de pérdida y comparación; 21 tests
+  nuevos (38 en total, incluido gradiente frente a diferencias finitas).
 - [ ] **Día 3 (sáb 2026-11-28)** — Evaluar en serio y explicar: validación cruzada k-fold,
   búsqueda del mejor `alfa`/`C`, curvas precisión-recall y ROC (AUC) a mano con PNG,
   ajuste del umbral (priorizar no mandar mensajes buenos a spam) y comando `explicar`

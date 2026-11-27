@@ -147,6 +147,17 @@ def _errata(texto: str, rng: random.Random) -> str:
     return texto[:i] + texto[i + 1:]
 
 
+def meter_erratas(textos: list[str], n_erratas: int = 2, semilla: int = 0) -> list[str]:
+    """Copia de los textos con n_erratas extra cada uno (para probar la robustez)."""
+    rng = random.Random(semilla)
+    resultado = []
+    for texto in textos:
+        for _ in range(n_erratas):
+            texto = _errata(texto, rng)
+        resultado.append(texto)
+    return resultado
+
+
 def generar_mensajes(n: int = 1200, prop_spam: float = 0.35, ruido: float = 0.03,
                      semilla: int = 42) -> list[tuple[str, str]]:
     """Genera n mensajes (texto, etiqueta) sin duplicados.
