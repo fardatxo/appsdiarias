@@ -40,10 +40,14 @@ Bloque B (jueves-domingo): 4 días, 4 hitos.
   contra `TfidfVectorizer` / `LogisticRegression` (`--sklearn`); `evaluar` y `predecir`
   aceptan `--modelo` / `--repr`; gráficas de curva de pérdida y comparación; 21 tests
   nuevos (38 en total, incluido gradiente frente a diferencias finitas).
-- [ ] **Día 3 (sáb 2026-11-28)** — Evaluar en serio y explicar: validación cruzada k-fold,
-  búsqueda del mejor `alfa`/`C`, curvas precisión-recall y ROC (AUC) a mano con PNG,
-  ajuste del umbral (priorizar no mandar mensajes buenos a spam) y comando `explicar`
-  que desglosa la contribución de cada palabra a una predicción.
+- [x] **Día 3 (sáb 2026-11-28)** — Evaluar en serio y explicar: `spam/evaluacion.py` con
+  pliegues estratificados, validación cruzada k-fold (media ± desviación y probabilidades
+  "fuera de pliegue"), búsqueda en rejilla de `alfa`/`C` (comando `validar`, con curva de
+  validación en PNG), curvas ROC y precisión-recall, AUC-ROC y precisión media a mano
+  (idénticas a scikit-learn), elección del umbral con validación (máx. F1 o precisión
+  mínima) y comparación en test (comando `curvas`, PNG con ROC + PR); `spam/explicacion.py`
+  con el comando `explicar`, que desglosa los log-odds de forma exacta por término (o por
+  palabra en el modelo de caracteres); `predecir --umbral`; 19 tests nuevos (57 en total).
 - [ ] **Día 4 (dom 2026-11-29)** — Reutilizar y pulir: guardar/cargar el modelo en JSON,
   segundo caso de uso (análisis de sentimiento de reseñas generadas), demo web mínima
   con `http.server` para probar mensajes, más tests y README final con métricas reales

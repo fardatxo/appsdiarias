@@ -6,6 +6,9 @@ Uso:
     python main.py evaluar [--modelo bayes|logistica] [--repr bolsa|tfidf|...] [--grafica]
     python main.py predecir "texto del mensaje" [...] [--modelo ...] [--repr ...]
     python main.py comparar [--erratas 3] [--sklearn] [--grafica]
+    python main.py validar [--modelo ...] [--repr ...] [--k 5] [--valores 0.1 1 10] [--grafica]
+    python main.py curvas [--precision-min 0.99] [--grafica]
+    python main.py explicar "texto del mensaje" [...] [--modelo ...] [--repr ...] [--n 12]
 """
 
 import argparse
@@ -17,8 +20,12 @@ import numpy as np
 
 from spam.datos import (ETIQUETAS, RUTA_CSV, cargar_csv, dividir_train_test, generar_mensajes,
                         guardar_csv, meter_erratas)
+from spam.evaluacion import (VALORES_POR_DEFECTO, aplicar_umbral, auc_roc, buscar_hiperparametro,
+                             curva_precision_recall, curva_roc, elegir_umbral, precision_media,
+                             validacion_cruzada)
 from spam.experimentos import (MODELOS, REPRESENTACIONES, comparar, entrenar, formatear_tabla,
                                verificar_con_sklearn)
+from spam.explicacion import explicar, formatear_explicacion
 from spam.logistica import RegresionLogistica
 from spam.metricas import formatear_informe, informe
 from spam.texto import tokenizar
@@ -117,13 +124,118 @@ def cmd_predecir(args):
     vec, modelo = entrenar_modelo(textos, y, args)  # usa todos los datos
     proba = modelo.predecir_proba(vec.transformar(args.mensajes))[:, 1]
     for texto, p in zip(args.mensajes, proba):
-        etiqueta = "SPAM" if p >= 0.5 else "ham "
+        etiqueta = "SPAM" if p >= args.umbral else "ham "
         print(f"[{etiqueta}] P(spam) = {p:.3f}  ·  {texto}")
         conocidas = [t for t in vec.terminos(texto) if t in vec.vocabulario]
         if args.repr == "tfidf-caracteres":  # demasiados trozos para listarlos todos
             print(f"         términos conocidos: {len(conocidas)}")
         else:
             print(f"         términos usados: {' | '.join(conocidas) or '(ninguno conocido)'}")
+
+
+def cmd_explicar(args):
+    textos, y = cargar_csv(Path(args.csv))
+    vec, modelo = entrenar_modelo(textos, y, args)  # usa todos los datos, como predecir
+    print(f"Modelo: {MODELOS[args.modelo][0]} · Representación: {REPRESENTACIONES[args.repr][0]}")
+    print("Contribución de cada término a los log-odds = log(P(spam) / P(ham)); "
+          "█ empuja a spam, ░ a ham.")
+    for texto in args.mensajes:
+        exp = explicar(vec, modelo, texto)
+        etiqueta = "SPAM" if exp["proba"] >= args.umbral else "ham"
+        print(f"\n«{texto}»  →  {etiqueta}")
+        print(formatear_explicacion(exp, n=args.n))
+
+
+def _nombre_param(modelo: str) -> str:
+    return "alfa" if modelo == "bayes" else "C"
+
+
+def cmd_validar(args):
+    tx_train, tx_test, y_train, y_test = preparar(args)
+    nombre = _nombre_param(args.modelo)
+    valores = args.valores or VALORES_POR_DEFECTO[args.modelo]
+    print(f"Modelo: {MODELOS[args.modelo][0]} · Representación: {REPRESENTACIONES[args.repr][0]}")
+    print(f"Validación cruzada estratificada con k = {args.k} pliegues, SOLO sobre los "
+          f"{len(tx_train)} mensajes de train.\n")
+    filas, mejor = buscar_hiperparametro(tx_train, y_train, args.repr, args.modelo, valores,
+                                         k=args.k, semilla=args.semilla)
+    print(f"{nombre:>7s}  {'exactitud':>15s}  {'precisión':>15s}  {'recall':>15s}  {'F1':>15s}")
+    for f in filas:
+        celdas = "  ".join(f"{f['media'][c]:.3f} ± {f['desviacion'][c]:.3f}".rjust(15)
+                           for c in ("exactitud", "precision", "recall", "f1"))
+        marca = "  ← mejor" if f["valor"] == mejor else ""
+        print(f"{f['valor']:7g}  {celdas}{marca}")
+
+    # Con el mejor valor: entrenar con TODO el train y medir UNA vez en test.
+    params = {"alfa": mejor} if args.modelo == "bayes" else {"C": mejor}
+    vec, modelo = entrenar(tx_train, y_train, args.repr, args.modelo, **params)
+    inf = informe(y_test, modelo.predecir(vec.transformar(tx_test)))
+    print(f"\nMejor {nombre} = {mejor:g} (con empate se elige el modelo más sencillo). "
+          f"Resultado en test:")
+    print(formatear_informe(inf))
+
+    if args.grafica:
+        ruta = guardar_grafica_validacion(filas, mejor, args)
+        print(f"\nGráfica guardada en {ruta}")
+
+
+# Configuraciones que se comparan en «curvas» (representación, modelo, etiqueta).
+CONFIG_CURVAS = [
+    ("bolsa", "bayes", "Bayes · bolsa"),
+    ("tfidf", "logistica", "logística · TF-IDF"),
+    ("tfidf-caracteres", "logistica", "logística · caracteres"),
+]
+
+
+def cmd_curvas(args):
+    tx_train, tx_test, y_train, y_test = preparar(args)
+    print(f"Probabilidades de validación: «fuera de pliegue» con k = {args.k} dentro de train.")
+    print("AUC-ROC: probabilidad de que un spam puntúe más que un ham. "
+          "AP: precisión media (área bajo la curva PR).\n")
+    print(f"{'configuración':24s} {'AUC val.':>8s} {'AP val.':>8s} {'AUC test':>8s} {'AP test':>8s}")
+    curvas = []
+    for repr_, modelo, etiqueta in CONFIG_CURVAS:
+        oof = validacion_cruzada(tx_train, y_train, repr_, modelo, alfa=args.alfa, C=args.C,
+                                 k=args.k, semilla=args.semilla)["proba_oof"]
+        vec, mod = entrenar(tx_train, y_train, repr_, modelo, alfa=args.alfa, C=args.C)
+        p_test = mod.predecir_proba(vec.transformar(tx_test))[:, 1]
+        print(f"{etiqueta:24s} {auc_roc(y_train, oof):8.3f} {precision_media(y_train, oof):8.3f} "
+              f"{auc_roc(y_test, p_test):8.3f} {precision_media(y_test, p_test):8.3f}")
+        curvas.append({"etiqueta": etiqueta, "repr": repr_, "modelo": modelo,
+                       "oof": oof, "test": p_test})
+
+    # Ajuste del umbral: se elige con las probabilidades de validación y se comprueba en test.
+    elegida = next((c for c in curvas if (c["repr"], c["modelo"]) == (args.repr, args.modelo)),
+                   None)
+    if elegida is None:  # otra combinación: la calculamos aparte
+        oof = validacion_cruzada(tx_train, y_train, args.repr, args.modelo, alfa=args.alfa,
+                                 C=args.C, k=args.k, semilla=args.semilla)["proba_oof"]
+        vec, mod = entrenar(tx_train, y_train, args.repr, args.modelo, alfa=args.alfa, C=args.C)
+        elegida = {"etiqueta": f"{args.modelo} · {args.repr}", "oof": oof,
+                   "test": mod.predecir_proba(vec.transformar(tx_test))[:, 1]}
+    print(f"\nAjuste del umbral para «{elegida['etiqueta']}»:")
+    umbral_f1, _ = elegir_umbral(y_train, elegida["oof"])
+    umbral_p, info_p = elegir_umbral(y_train, elegida["oof"], precision_minima=args.precision_min)
+    print(f"{'umbral':>26s} {'prec. val':>9s} {'rec. val':>8s} │ {'prec. test':>10s} "
+          f"{'rec. test':>9s} {'F1 test':>7s} {'FP':>3s} {'FN':>3s}")
+    opciones = [(f"{u:g}", u) for u in (0.1, 0.3, 0.5, 0.7, 0.9)]
+    opciones += [(f"máx. F1 → {umbral_f1:.3f}", umbral_f1),
+                 (f"prec. ≥ {args.precision_min:g} → {umbral_p:.3f}", umbral_p)]
+    for nombre, u in opciones:
+        v = informe(y_train, aplicar_umbral(elegida["oof"], u))
+        t = informe(y_test, aplicar_umbral(elegida["test"], u))
+        print(f"{nombre:>26s} {v['precision']:9.3f} {v['recall']:8.3f} │ "
+              f"{t['precision']:10.3f} {t['recall']:9.3f} {t['f1']:7.3f} "
+              f"{t['falsos_positivos']:3d} {t['falsos_negativos']:3d}")
+    if info_p["recall"] < 0.5:
+        print(f"Aviso: para llegar a precisión {args.precision_min:g} hay que renunciar a casi todo "
+              f"el spam (recall {info_p['recall']:.2f}). Con un 3 % de etiquetas mal puestas, "
+              "parte de los «falsos positivos» son en realidad spam etiquetado como ham.")
+    print("FP = mensajes buenos enviados a spam · FN = spam que se cuela en la bandeja.")
+
+    if args.grafica:
+        ruta = guardar_grafica_curvas(curvas, y_test, elegida, umbral_p)
+        print(f"\nGráfica guardada en {ruta}")
 
 
 def cmd_comparar(args):
@@ -232,6 +344,74 @@ def guardar_grafica_comparacion(filas) -> Path:
     return ruta
 
 
+def guardar_grafica_validacion(filas, mejor, args) -> Path:
+    """Curva de validación: F1 media (± desviación) frente al hiperparámetro."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    valores = [f["valor"] for f in filas]
+    medias = np.array([f["media"]["f1"] for f in filas])
+    desv = np.array([f["desviacion"]["f1"] for f in filas])
+    fig, ax = plt.subplots(figsize=(6, 3.5), dpi=90)
+    ax.plot(valores, medias, "o-", color="#2e86c1", label="F1 media (validación)")
+    ax.fill_between(valores, medias - desv, medias + desv, color="#2e86c1", alpha=0.2,
+                    label="± 1 desviación")
+    ax.axvline(mejor, color="#c0392b", linestyle="--", linewidth=1, label=f"elegido = {mejor:g}")
+    ax.set_xscale("log")
+    ax.set_xlabel(_nombre_param(args.modelo) + " (escala log)")
+    ax.set_ylabel("F1 (spam)")
+    ax.set_title(f"Validación cruzada ({args.k} pliegues): {MODELOS[args.modelo][0]}")
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    CARPETA_GRAFICAS.mkdir(exist_ok=True)
+    ruta = CARPETA_GRAFICAS / f"validacion_{args.modelo}.png"
+    fig.savefig(ruta)
+    plt.close(fig)
+    return ruta
+
+
+def guardar_grafica_curvas(curvas, y_test, elegida, umbral) -> Path:
+    """Curvas ROC y precisión-recall en test, con el umbral elegido marcado."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    colores = ["#2e86c1", "#8e44ad", "#e67e22"]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 4), dpi=90)
+    for c, color in zip(curvas, colores):
+        tfp, tvp, _ = curva_roc(y_test, c["test"])
+        ax1.plot(tfp, tvp, color=color, label=f"{c['etiqueta']} (AUC {auc_roc(y_test, c['test']):.3f})")
+        prec, rec, _ = curva_precision_recall(y_test, c["test"])
+        ax2.step(rec, prec, where="post", color=color,
+                 label=f"{c['etiqueta']} (AP {precision_media(y_test, c['test']):.3f})")
+    ax1.plot([0, 1], [0, 1], ":", color="#999", label="azar (AUC 0.5)")
+    # Punto de funcionamiento con el umbral elegido.
+    inf = informe(y_test, aplicar_umbral(elegida["test"], umbral))
+    m = inf["matriz"]
+    ax1.plot(m[0, 1] / m[0].sum(), inf["recall"], "o", color="#c0392b", label=f"umbral {umbral:.2f}")
+    ax2.plot(inf["recall"], inf["precision"], "o", color="#c0392b", label=f"umbral {umbral:.2f}")
+    ax1.set_xlabel("tasa de falsos positivos (ham → spam)")
+    ax1.set_ylabel("recall (spam cazado)")
+    ax1.set_title("Curva ROC (test)")
+    ax2.set_xlabel("recall")
+    ax2.set_ylabel("precisión")
+    ax2.set_title("Curva precisión-recall (test)")
+    ax2.set_ylim(0.5, 1.02)
+    for ax in (ax1, ax2):
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=7, loc="lower right" if ax is ax1 else "lower left")
+    fig.tight_layout()
+    CARPETA_GRAFICAS.mkdir(exist_ok=True)
+    ruta = CARPETA_GRAFICAS / "curvas_roc_pr.png"
+    fig.savefig(ruta)
+    plt.close(fig)
+    return ruta
+
+
 # --- Argumentos ------------------------------------------------------------
 
 def crear_parser() -> argparse.ArgumentParser:
@@ -268,10 +448,41 @@ def crear_parser() -> argparse.ArgumentParser:
                    help="guarda un PNG (palabras clave en Bayes, curva de pérdida en logística)")
     e.set_defaults(func=cmd_evaluar)
 
+    def opcion_umbral(sp):
+        sp.add_argument("--umbral", type=float, default=0.5,
+                        help="P(spam) a partir de la cual se marca como spam")
+
     pr = sub.add_parser("predecir", help="clasifica mensajes nuevos")
     pr.add_argument("mensajes", nargs="+")
     opciones_modelo(pr)
+    opcion_umbral(pr)
     pr.set_defaults(func=cmd_predecir)
+
+    ex = sub.add_parser("explicar", help="desglosa qué palabras deciden la predicción")
+    ex.add_argument("mensajes", nargs="+")
+    opciones_modelo(ex)
+    opcion_umbral(ex)
+    ex.add_argument("--n", type=int, default=12, help="términos a mostrar")
+    ex.set_defaults(func=cmd_explicar)
+
+    v = sub.add_parser("validar", help="validación cruzada y búsqueda de alfa / C")
+    opciones_modelo(v)
+    opciones_division(v)
+    v.add_argument("--k", type=int, default=5, help="número de pliegues")
+    v.add_argument("--valores", type=float, nargs="+",
+                   help="valores de alfa (Bayes) o C (logística) a probar")
+    v.add_argument("--grafica", action="store_true", help="guarda la curva de validación")
+    v.set_defaults(func=cmd_validar)
+
+    cu = sub.add_parser("curvas", help="curvas ROC/PR, AUC y ajuste del umbral")
+    opciones_modelo(cu)
+    cu.set_defaults(modelo="logistica", repr="tfidf")
+    opciones_division(cu)
+    cu.add_argument("--k", type=int, default=5, help="número de pliegues")
+    cu.add_argument("--precision-min", type=float, default=0.96,
+                    help="precisión mínima exigida al elegir el umbral")
+    cu.add_argument("--grafica", action="store_true", help="guarda las curvas en PNG")
+    cu.set_defaults(func=cmd_curvas)
 
     c = sub.add_parser("comparar", help="tabla de todas las representaciones × modelos")
     c.add_argument("--alfa", type=float, default=1.0, help="suavizado de Laplace (Bayes)")
